@@ -18,9 +18,7 @@ final class PopupPanelController {
         dismiss()
 
         let panelWidth: CGFloat = 340
-        let rowHeight: CGFloat = 52
-        let maxVisibleRows = min(items.count, 10)
-        let panelHeight = max(CGFloat(maxVisibleRows) * rowHeight + 16, 80)
+        let panelHeight: CGFloat = 340
 
         let panel = FloatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
@@ -82,7 +80,8 @@ final class FloatingPanel: NSPanel {
         isMovableByWindowBackground = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        backgroundColor = .windowBackgroundColor
-        hasShadow = true
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = false
     }
 }

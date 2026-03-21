@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 
+private let fruitClipBlue = Color(red: 0.2, green: 0.5, blue: 1.0)
+
 struct ClipboardPopupView: View {
     let items: [ClipboardHistoryItem]
     let onSelect: (ClipboardHistoryItem) -> Void
@@ -18,7 +20,13 @@ struct ClipboardPopupView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.regularMaterial)
+        )
+        .overlay(AnimatedGradientBorder(cornerRadius: 16))
+        .padding(8)
         .onAppear {
             isFocused = true
         }
@@ -38,13 +46,14 @@ struct ClipboardPopupView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .focusable()
+        .focusEffectDisabled()
         .focused($isFocused)
         .onKeyPress(.escape) { onDismiss(); return .handled }
     }
 
     private var itemList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 2) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         ClipboardItemRow(
@@ -61,18 +70,23 @@ struct ClipboardPopupView: View {
                 .padding(.horizontal, 6)
             }
             .focusable()
+            .focusEffectDisabled()
             .focused($isFocused)
             .onKeyPress(.upArrow) {
                 if selectedIndex > 0 {
                     selectedIndex -= 1
-                    proxy.scrollTo(selectedIndex, anchor: .center)
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        proxy.scrollTo(selectedIndex, anchor: .center)
+                    }
                 }
                 return .handled
             }
             .onKeyPress(.downArrow) {
                 if selectedIndex < items.count - 1 {
                     selectedIndex += 1
-                    proxy.scrollTo(selectedIndex, anchor: .center)
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        proxy.scrollTo(selectedIndex, anchor: .center)
+                    }
                 }
                 return .handled
             }
@@ -115,8 +129,9 @@ struct ClipboardItemRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor : Color.clear)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isSelected ? fruitClipBlue : Color.clear)
+                .shadow(color: isSelected ? fruitClipBlue.opacity(0.4) : .clear, radius: 4)
         )
         .contentShape(Rectangle())
     }
@@ -134,7 +149,7 @@ struct ClipboardItemRow: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 Image(systemName: "photo")
                     .font(.system(size: 16))
@@ -151,5 +166,44 @@ struct ClipboardItemRow: View {
             "com.veer.FruitClip", isDirectory: true)
         let fileURL = storageDir.appendingPathComponent(item.payloadFilename)
         return try? Data(contentsOf: fileURL)
+    }
+}
+
+struct AnimatedGradientBorder: View {
+    let cornerRadius: CGFloat
+    @State private var rotationAngle: Double = 0
+
+    var body: some View {
+        let gradient = AngularGradient(
+            stops: [
+                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9),  location: 0.0),
+                .init(color: Color(red: 0.4, green: 0.7,  blue: 1.0),  location: 0.25),
+                .init(color: Color(red: 0.15, green: 0.45, blue: 0.95), location: 0.5),
+                .init(color: Color(red: 0.3, green: 0.6,  blue: 1.0),  location: 0.75),
+                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9),  location: 1.0),
+            ],
+            center: .center,
+            angle: .degrees(rotationAngle)
+        )
+
+        ZStack {
+            // Soft outer glow
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(lineWidth: 3)
+                .fill(gradient)
+                .blur(radius: 6)
+                .opacity(0.7)
+
+            // Crisp border line
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(lineWidth: 1.5)
+                .fill(gradient)
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 5.0).repeatForever(autoreverses: false)) {
+                rotationAngle = 360
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
