@@ -1,4 +1,6 @@
-# FruitClip
+# Fruit Clip
+
+<img src="fruit-clip.png" width="120" alt="Fruit Clip logo" />
 
 A lightweight native macOS clipboard manager. Keeps your last 10 clipboard items (text and images) accessible via a global hotkey, with auto-paste back into the previously focused app.
 
@@ -21,7 +23,7 @@ A lightweight native macOS clipboard manager. Keeps your last 10 clipboard items
 - Swift 6.0+ (included with Xcode or Command Line Tools)
 - **Accessibility permission** required for auto-paste (the app will prompt you)
 
-## Build
+## Install & Run
 
 ```bash
 # Clone and build
@@ -32,14 +34,9 @@ cd fruit-clip
 open FruitClip.app
 ```
 
-The build script compiles with SPM, assembles a proper `.app` bundle with `Info.plist`, and ad-hoc code signs it.
+The build script compiles with SPM, generates the app icon from `fruit-clip.png`, assembles a proper `.app` bundle with `Info.plist`, and ad-hoc code signs it.
 
-For development builds without the bundle:
-
-```bash
-swift build
-swift test
-```
+Grant **Accessibility** permission when prompted on first launch (required for auto-paste).
 
 ## Usage
 

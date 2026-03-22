@@ -66,16 +66,15 @@ struct ClipboardPopupView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 6)
+                .padding(8)
             }
             .focusable()
             .focusEffectDisabled()
             .focused($isFocused)
             .onKeyPress(.upArrow) {
                 if selectedIndex > 0 {
-                    selectedIndex -= 1
                     withAnimation(.easeInOut(duration: 0.15)) {
+                        selectedIndex -= 1
                         proxy.scrollTo(selectedIndex, anchor: .center)
                     }
                 }
@@ -83,8 +82,8 @@ struct ClipboardPopupView: View {
             }
             .onKeyPress(.downArrow) {
                 if selectedIndex < items.count - 1 {
-                    selectedIndex += 1
                     withAnimation(.easeInOut(duration: 0.15)) {
+                        selectedIndex += 1
                         proxy.scrollTo(selectedIndex, anchor: .center)
                     }
                 }
@@ -109,8 +108,10 @@ struct ClipboardItemRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            itemIcon
-                .frame(width: 32, height: 32)
+            if item.kind == .image {
+                itemIcon
+                    .frame(width: 32, height: 32)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.preview)
@@ -119,15 +120,16 @@ struct ClipboardItemRow: View {
                     .truncationMode(.tail)
                     .foregroundStyle(isSelected ? .white : .primary)
 
-                Text(item.timestamp, style: .relative)
+                Text(elapsedString(from: item.timestamp))
                     .font(.system(size: 10))
                     .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
             }
 
             Spacer()
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(height: 48)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isSelected ? fruitClipBlue : Color.clear)
@@ -138,24 +140,23 @@ struct ClipboardItemRow: View {
 
     @ViewBuilder
     private var itemIcon: some View {
-        switch item.kind {
-        case .text:
-            Image(systemName: "doc.text")
+        if let data = loadThumbnailData() {
+            Image(nsImage: NSImage(data: data) ?? NSImage())
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
+            Image(systemName: "photo")
                 .font(.system(size: 16))
                 .foregroundStyle(isSelected ? .white : .secondary)
-        case .image:
-            if let data = loadThumbnailData() {
-                Image(nsImage: NSImage(data: data) ?? NSImage())
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 16))
-                    .foregroundStyle(isSelected ? .white : .secondary)
-            }
         }
+    }
+
+    private func elapsedString(from date: Date) -> String {
+        let minutes = Int(Date().timeIntervalSince(date) / 60)
+        if minutes < 1 { return "<1m" }
+        return "\(minutes)m"
     }
 
     private func loadThumbnailData() -> Data? {
