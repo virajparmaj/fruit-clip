@@ -67,12 +67,19 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>FruitClip needs Accessibility permission to automatically paste clipboard items into other applications.</string>
 </dict>
 </plist>
 PLIST
 
 echo "Code signing (ad-hoc)..."
 codesign --force --sign - "${APP_BUNDLE}"
+
+echo "Verifying build..."
+codesign --verify --deep --strict "${APP_BUNDLE}"
+plutil -lint "${APP_BUNDLE}/Contents/Info.plist" > /dev/null
+test -x "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}" || { echo "ERROR: binary not executable"; exit 1; }
 
 echo ""
 echo "Build complete: $(pwd)/${APP_BUNDLE}"

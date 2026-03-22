@@ -13,6 +13,14 @@ final class PasteController {
         self.historyStore = historyStore
     }
 
+    func copyItemOnly(_ item: ClipboardHistoryItem) {
+        guard let data = historyStore.loadPayload(for: item) else {
+            logger.error("Failed to load payload for item: \(item.id)")
+            return
+        }
+        restoreToClipboard(item: item, data: data)
+    }
+
     func pasteItem(_ item: ClipboardHistoryItem, previousApp: NSRunningApplication?) {
         guard let data = historyStore.loadPayload(for: item) else {
             logger.error("Failed to load payload for item: \(item.id)")
@@ -34,7 +42,7 @@ final class PasteController {
 
     private func restoreToClipboard(item: ClipboardHistoryItem, data: Data) {
         let pasteboard = NSPasteboard.general
-        historyStore.isWritingToPasteboard = true
+        historyStore.beginPasteboardWrite()
 
         pasteboard.clearContents()
 
@@ -47,8 +55,7 @@ final class PasteController {
             pasteboard.setData(data, forType: .tiff)
         }
 
-        historyStore.lastSelfChangeCount = pasteboard.changeCount
-        historyStore.isWritingToPasteboard = false
+        historyStore.endPasteboardWrite(changeCount: pasteboard.changeCount)
     }
 
     private func synthesizePaste() {

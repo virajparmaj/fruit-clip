@@ -34,10 +34,10 @@ final class PreferencesWindowController {
         )
 
         let hostingView = NSHostingView(rootView: prefsView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 400, height: 320)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 400, height: 420)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 420),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -60,6 +60,24 @@ struct PreferencesView: View {
 
     @State private var isRecordingHotkey = false
     @State private var hotkeyDisplay: String = ""
+    @State private var updateStatus: UpdateStatus = .idle
+
+    private enum UpdateStatus {
+        case idle
+        case checking
+        case upToDate
+        case available(String)
+        case error
+    }
+
+    private struct GitHubRelease: Decodable {
+        let tagName: String
+        enum CodingKeys: String, CodingKey { case tagName = "tag_name" }
+    }
+
+    private var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
 
     var body: some View {
         Form {
@@ -98,6 +116,7 @@ struct PreferencesView: View {
                         updateLaunchAtLogin(newValue)
                     }
                 ))
+                Toggle("Dismiss on mouse move", isOn: $settingsStore.dismissOnMouseMove)
             }
 
             Section("Accessibility") {
@@ -124,9 +143,30 @@ struct PreferencesView: View {
                     onClearHistory()
                 }
             }
+
+            Section("Updates") {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Version \(currentVersion)")
+                            .font(.body)
+                        updateStatusView
+                    }
+                    Spacer()
+                    Button {
+                        Task { await checkForUpdates() }
+                    } label: {
+                        if case .checking = updateStatus {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Check for Updates")
+                        }
+                    }
+                    .disabled({ if case .checking = updateStatus { return true }; return false }())
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 320)
+        .frame(width: 400, height: 420)
         .onAppear {
             hotkeyDisplay = formatHotkey(
                 keyCode: settingsStore.hotkeyKeyCode,
@@ -148,6 +188,59 @@ struct PreferencesView: View {
         )
     }
 
+    @ViewBuilder
+    private var updateStatusView: some View {
+        switch updateStatus {
+        case .idle:
+            EmptyView()
+        case .checking:
+            EmptyView()
+        case .upToDate:
+            Label("FruitClip is up to date.", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case .available(let version):
+            HStack(spacing: 6) {
+                Label("Version \(version) is available.", systemImage: "info.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+                Button("Download") {
+                    NSWorkspace.shared.open(
+                        URL(string: "https://github.com/virajparmaj/fruit-clip/releases/latest")!
+                    )
+                }
+                .font(.caption)
+                .buttonStyle(.link)
+            }
+        case .error:
+            Label("Could not check for updates.", systemImage: "exclamationmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func checkForUpdates() async {
+        updateStatus = .checking
+        do {
+            let url = URL(string: "https://api.github.com/repos/virajparmaj/fruit-clip/releases/latest")!
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if (response as? HTTPURLResponse)?.statusCode == 404 {
+                // No releases published yet — already on latest
+                updateStatus = .upToDate
+                return
+            }
+            let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            let latest = release.tagName.trimmingCharacters(in: .init(charactersIn: "v"))
+            if latest.compare(currentVersion, options: .numeric) == .orderedDescending {
+                updateStatus = .available(latest)
+            } else {
+                updateStatus = .upToDate
+            }
+        } catch {
+            updateStatus = .error
+        }
+    }
+
     private func updateLaunchAtLogin(_ enabled: Bool) {
         let service = SMAppService.mainApp
         do {
@@ -162,29 +255,7 @@ struct PreferencesView: View {
     }
 
     private func formatHotkey(keyCode: UInt32, modifiers: UInt32) -> String {
-        var parts: [String] = []
-        if modifiers & UInt32(controlKey) != 0 { parts.append("^") }
-        if modifiers & UInt32(optionKey) != 0 { parts.append("\u{2325}") }
-        if modifiers & UInt32(shiftKey) != 0 { parts.append("\u{21E7}") }
-        if modifiers & UInt32(cmdKey) != 0 { parts.append("\u{2318}") }
-        parts.append(keyCodeToString(keyCode))
-        return parts.joined()
-    }
-
-    private func keyCodeToString(_ keyCode: UInt32) -> String {
-        let keyMap: [UInt32: String] = [
-            0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
-            0x05: "G", 0x06: "Z", 0x07: "X", 0x08: "C", 0x09: "V",
-            0x0B: "B", 0x0C: "Q", 0x0D: "W", 0x0E: "E", 0x0F: "R",
-            0x10: "Y", 0x11: "T", 0x12: "1", 0x13: "2", 0x14: "3",
-            0x15: "4", 0x17: "5", 0x16: "6", 0x1A: "7", 0x1C: "8",
-            0x19: "9", 0x1D: "0", 0x1E: "]", 0x1F: "O", 0x20: "U",
-            0x21: "[", 0x22: "I", 0x23: "P", 0x25: "L", 0x26: "J",
-            0x28: "K", 0x2C: "/", 0x2D: "N", 0x2E: "M", 0x2F: ".",
-            0x31: " ", 0x24: "\u{23CE}", 0x30: "\u{21E5}",
-            0x33: "\u{232B}", 0x35: "\u{238B}",
-        ]
-        return keyMap[keyCode] ?? "?"
+        HotkeyFormatter.format(keyCode: keyCode, modifiers: modifiers)
     }
 }
 
@@ -244,11 +315,6 @@ class HotkeyRecorderNSView: NSView {
     }
 
     private func cocoaToCarbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
-        var carbon: UInt32 = 0
-        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
-        if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
-        if flags.contains(.option) { carbon |= UInt32(optionKey) }
-        if flags.contains(.control) { carbon |= UInt32(controlKey) }
-        return carbon
+        HotkeyFormatter.cocoaToCarbonModifiers(flags.rawValue)
     }
 }

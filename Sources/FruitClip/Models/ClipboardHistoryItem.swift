@@ -8,19 +8,21 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable, Sendable {
     let contentHash: String
     let preview: String
     let payloadFilename: String
+    var isPinned: Bool
 
     enum Kind: String, Codable, Sendable {
         case text
         case image
     }
 
-    init(kind: Kind, contentHash: String, preview: String, payloadFilename: String) {
+    init(kind: Kind, contentHash: String, preview: String, payloadFilename: String, isPinned: Bool = false) {
         self.id = UUID()
         self.kind = kind
         self.timestamp = Date()
         self.contentHash = contentHash
         self.preview = preview
         self.payloadFilename = payloadFilename
+        self.isPinned = isPinned
     }
 
     static func computeHash(of data: Data) -> String {

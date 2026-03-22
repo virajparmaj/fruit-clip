@@ -1,6 +1,7 @@
 # Fruit Clip
-
-<img src="fruit-clip.png" width="120" alt="Fruit Clip logo" />
+<div align="center">
+    <img src="fruit-clip.png" width="120" alt="Fruit Clip logo" />
+</div>
 
 A lightweight native macOS clipboard manager. Keeps your last 10 clipboard items (text and images) accessible via a global hotkey, with auto-paste back into the previously focused app.
 

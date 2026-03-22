@@ -26,6 +26,19 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
             self.pasteController.pasteItem(item, previousApp: prevApp)
         }
 
+        popupController.onItemCopied = { [weak self] item in
+            guard let self else { return }
+            self.pasteController.copyItemOnly(item)
+        }
+
+        popupController.onItemDeleted = { [weak self] item in
+            self?.historyStore.deleteItem(item)
+        }
+
+        popupController.onItemPinToggled = { [weak self] item in
+            self?.historyStore.togglePin(item)
+        }
+
         hotkeyManager = GlobalHotkeyManager(settingsStore: settingsStore) { [weak self] in
             self?.togglePopup()
         }

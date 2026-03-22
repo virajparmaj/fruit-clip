@@ -52,4 +52,30 @@ struct ClipboardHistoryItemTests {
         let decoded = try JSONDecoder().decode(ClipboardHistoryItem.self, from: encoded)
         #expect(decoded.kind == .image)
     }
+
+    @Test("Timestamp is set near current time on init")
+    func timestampIsNearNow() {
+        let before = Date()
+        let item = ClipboardHistoryItem(
+            kind: .text, contentHash: "x", preview: "x", payloadFilename: "x.dat")
+        let after = Date()
+        #expect(item.timestamp >= before)
+        #expect(item.timestamp <= after)
+    }
+
+    @Test("Two items have different UUIDs")
+    func twoItemsHaveDifferentIDs() {
+        let item1 = ClipboardHistoryItem(
+            kind: .text, contentHash: "a", preview: "a", payloadFilename: "1.dat")
+        let item2 = ClipboardHistoryItem(
+            kind: .text, contentHash: "a", preview: "a", payloadFilename: "2.dat")
+        #expect(item1.id != item2.id)
+    }
+
+    @Test("Empty data produces valid 64-char hex hash")
+    func emptyDataHashIsValid() {
+        let hash = ClipboardHistoryItem.computeHash(of: Data())
+        #expect(hash.count == 64)
+        #expect(hash.allSatisfy { "0123456789abcdef".contains($0) })
+    }
 }
