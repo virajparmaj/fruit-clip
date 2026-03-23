@@ -28,10 +28,28 @@ final class StatusItemController {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "FruitClip")
+            if let image = StatusItemController.loadStatusIcon() {
+                image.size = NSSize(width: 18, height: 18)
+                button.image = image
+            } else {
+                button.image = nil
+            }
+            button.imageScaling = .scaleProportionallyDown
         }
 
         buildMenu()
+    }
+
+    private static func loadStatusIcon() -> NSImage? {
+        if let url = Bundle.module.url(forResource: "fruit-clip-status", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            image.isTemplate = false
+            return image
+        }
+
+        let fallback = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "FruitClip")
+        fallback?.isTemplate = true
+        return fallback
     }
 
     func updateMenu() {

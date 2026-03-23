@@ -13,6 +13,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        applyDockIcon()
 
         settingsStore = SettingsStore()
         historyStore = ClipboardHistoryStore(settingsStore: settingsStore)
@@ -94,5 +95,14 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         if alert.runModal() == .alertFirstButtonReturn {
             historyStore.clearAll()
         }
+    }
+
+    private func applyDockIcon() {
+        guard
+            let url = Bundle.module.url(forResource: "fruit-clip", withExtension: "png"),
+            let image = NSImage(contentsOf: url)
+        else { return }
+
+        NSApplication.shared.applicationIconImage = image
     }
 }

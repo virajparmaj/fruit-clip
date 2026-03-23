@@ -11,6 +11,9 @@ let package = Package(
         .executableTarget(
             name: "FruitClip",
             path: "Sources/FruitClip",
+            resources: [
+                .process("Resources"),
+            ],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("ServiceManagement"),
