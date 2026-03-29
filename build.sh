@@ -73,6 +73,15 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << PLIST
 </plist>
 PLIST
 
+# Copy SPM module resources bundle (contains status bar icon accessed via Bundle.module)
+SPM_BUNDLE="${BUILD_DIR}/FruitClip_FruitClip.bundle"
+if [ -d "${SPM_BUNDLE}" ]; then
+    echo "Copying SPM resources bundle..."
+    cp -R "${SPM_BUNDLE}" "${APP_BUNDLE}/Contents/Resources/"
+else
+    echo "Warning: SPM resources bundle not found at ${SPM_BUNDLE} — status bar icon will fall back to paperclip"
+fi
+
 echo "Code signing (ad-hoc)..."
 codesign --force --sign - "${APP_BUNDLE}"
 

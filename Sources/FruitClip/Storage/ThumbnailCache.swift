@@ -46,6 +46,36 @@ final class ThumbnailCache {
         return nil
     }
 
+    // Async version for SwiftUI .task — drives view re-render when thumbnail is ready
+    func loadThumbnailAsync(for filename: String, storageDir: URL) async -> NSImage? {
+        if let cached = cache.object(forKey: filename as NSString) {
+            return cached
+        }
+
+        let fileURL = storageDir.appendingPathComponent(filename)
+
+        // Load raw data off the main thread
+        guard let data = await Task.detached(priority: .userInitiated, operation: {
+            try? Data(contentsOf: fileURL)
+        }).value else { return nil }
+
+        guard let image = NSImage(data: data) else { return nil }
+
+        // Resize on @MainActor (AppKit requirement)
+        let thumbSize = NSSize(width: 64, height: 64)
+        let thumb = NSImage(size: thumbSize)
+        thumb.lockFocus()
+        image.draw(
+            in: NSRect(origin: .zero, size: thumbSize),
+            from: NSRect(origin: .zero, size: image.size),
+            operation: .copy, fraction: 1.0
+        )
+        thumb.unlockFocus()
+
+        cache.setObject(thumb, forKey: filename as NSString)
+        return thumb
+    }
+
     func invalidate(filename: String) {
         cache.removeObject(forKey: filename as NSString)
         loadingKeys.remove(filename)

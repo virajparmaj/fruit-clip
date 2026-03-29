@@ -41,8 +41,11 @@ struct ClipboardPopupView: View {
         .overlay(AnimatedGradientBorder(cornerRadius: 16))
         .padding(8)
         .onAppear {
-            isSearchFocused = true
             selectedIndex = 0
+            // Defer focus so the window is fully key before SwiftUI assigns first responder
+            DispatchQueue.main.async {
+                isSearchFocused = true
+            }
         }
     }
 
@@ -117,8 +120,7 @@ struct ClipboardPopupView: View {
                     ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
                         ClipboardItemRow(
                             item: item,
-                            isSelected: index == selectedIndex,
-                            index: index
+                            isSelected: index == selectedIndex
                         )
                         .id(index)
                         .onTapGesture {
@@ -161,6 +163,8 @@ struct ClipboardPopupView: View {
                 return .handled
             }
             .onKeyPress(.delete) {
+                // Don't intercept delete when search field is active — let it backspace in search
+                guard !isSearchFocused else { return .ignored }
                 guard selectedIndex < filteredItems.count else { return .ignored }
                 let item = filteredItems[selectedIndex]
                 onDelete(item)
@@ -188,6 +192,8 @@ struct ClipboardPopupView: View {
                 return .handled
             }
             .onKeyPress(characters: .init(charactersIn: "123456789")) { press in
+                // Don't intercept digits while search is active — let them type into search
+                guard !isSearchFocused else { return .ignored }
                 guard let digit = Int(String(press.characters)), digit >= 1, digit <= 9 else {
                     return .ignored
                 }
@@ -210,18 +216,16 @@ struct ClipboardPopupView: View {
 struct ClipboardItemRow: View {
     let item: ClipboardHistoryItem
     let isSelected: Bool
-    let index: Int
+
+    @State private var cachedThumbnail: NSImage? = nil
+
+    private var storageDir: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first!.appendingPathComponent("com.veer.FruitClip", isDirectory: true)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
-            // Number badge for quick access (1-9)
-            if index < 9 {
-                Text("\(index + 1)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.6) : Color.secondary.opacity(0.5))
-                    .frame(width: 14)
-            }
-
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 10))
@@ -229,7 +233,7 @@ struct ClipboardItemRow: View {
             }
 
             if item.kind == .image {
-                itemIcon
+                thumbnailView
                     .frame(width: 32, height: 32)
             }
 
@@ -249,7 +253,7 @@ struct ClipboardItemRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .frame(height: 48)
+        .frame(minHeight: 48)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isSelected ? fruitClipBlue : Color.clear)
@@ -258,16 +262,19 @@ struct ClipboardItemRow: View {
         .contentShape(Rectangle())
         .accessibilityLabel("\(item.kind == .text ? "Text" : "Image") item: \(item.preview), \(elapsedString(from: item.timestamp))\(item.isPinned ? ", pinned" : "")")
         .accessibilityHint("Press Return to paste, Delete to remove, Command P to pin")
+        .task(id: item.payloadFilename) {
+            guard item.kind == .image else { return }
+            cachedThumbnail = await ThumbnailCache.shared.loadThumbnailAsync(
+                for: item.payloadFilename,
+                storageDir: storageDir
+            )
+        }
     }
 
     @ViewBuilder
-    private var itemIcon: some View {
-        let storageDir = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!.appendingPathComponent("com.veer.FruitClip", isDirectory: true)
-
-        if let image = ThumbnailCache.shared.thumbnail(for: item.payloadFilename, storageDir: storageDir) {
-            Image(nsImage: image)
+    private var thumbnailView: some View {
+        if let thumbnail = cachedThumbnail {
+            Image(nsImage: thumbnail)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 32, height: 32)
