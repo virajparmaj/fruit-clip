@@ -1,6 +1,6 @@
 # FruitClip — Dev Log & Design Notes
 
-_Last updated: 2026-03-25_
+_Last updated: 2026-03-30_
 
 ---
 
@@ -37,11 +37,25 @@ FruitClip is a working native macOS menu bar clipboard manager. All core feature
 - `CFBundleIconFile` set in `Info.plist` — icon shows in Finder/Dock
 - Skips gracefully if source PNG absent
 
+### Popup search & image render fix (`6f109a6`)
+- **`ThumbnailCache.loadThumbnailAsync()`** — async counterpart to the sync loader. Uses `.task(id: item.payloadFilename)` in `ClipboardItemRow`; drives SwiftUI re-render directly when thumbnail is ready. Replaces the poll-and-miss approach (the old sync path returned `nil` on first call and relied on the next poll cycle to redraw). `Confirmed from code`
+- **Deferred search focus** — `isSearchFocused = true` wrapped in `DispatchQueue.main.async { }` so the window is fully key before SwiftUI assigns first responder; fixes search not activating on popup open. `Confirmed from code`
+- **Delete / digit key guards** — `onKeyPress(.delete)` and `onKeyPress(characters: "123456789")` both early-return `.ignored` when `isSearchFocused` is `true`, preventing key interception while typing in the search field. `Confirmed from code`
+- **`build.sh` bundle copy** — added step to copy SPM resource bundle so `fruit-clip-status.png` resolves at runtime when run as a built `.app`. `Strongly inferred` from commit message ("copy spm bundle for fruit icon").
+
+### Preferences window refinement (`c316141`)
+- **"Check for Updates" section removed** — `UpdateStatus` enum, `GitHubRelease` struct, `currentVersion` computed property, and the `checkForUpdates()` async method all deleted. No in-app update checking. `Confirmed from code`
+- **Hotkey badge restyled** — pill background switched to `.controlColor` (was `.controlBackgroundColor`), corner radius 6→7, shows "Press keys…" in accent color while recording. `Confirmed from code`
+- **Window dimensions** — 400×420 → 420×370 (wider, shorter). `Confirmed from code`
+- **Accessibility row spacing** refined in Preferences rows. `Strongly inferred` from commit message.
+
 ### Popup redesign (`49149eb`)
 - **AnimatedGradientBorder** — `AngularGradient` with 5 blue stops, rotates 360° on 5s `repeatForever` linear animation. Double-layered: blurred outer (radius 6, opacity 0.7) + crisp inner (1.5pt stroke).
 - Background switched to `.regularMaterial` (vibrancy) — removed shadow halos for cleaner glass feel
 - Corner radii: dialog 12→16, selected row 6→10, image thumbnails 4→6
 - Keyboard scroll wrapped in `withAnimation(.easeOut(duration: 0.2))`; `focusEffectDisabled()` on list
+- **Search scoped to `.text` items** — image items excluded from filtered results (current working-tree state). `Confirmed from code`
+- **Directional scroll anchor** — going down pins lookahead item to bottom edge; going up uses minimum scroll (no `anchor:` argument) to avoid position jumping. `Confirmed from code`
 
 ---
 
@@ -84,6 +98,6 @@ CGEvent tap requires Accessibility permission. Carbon `RegisterEventHotKey` work
 - No notarization — can't distribute outside dev machines without it
 - Launch at login (`ServiceManagement`) wired but may need polish/testing
 - No CI/CD pipeline
-- `ThumbnailCache` uses `lockFocus/unlockFocus` which is deprecated in favor of `NSBitmapImageRep`-based drawing — works fine for now
-- `dismissOnMouseMove` setting exists in `SettingsStore` but implementation in `PopupPanelController` needs verification
+- `ThumbnailCache` uses `lockFocus/unlockFocus` (both sync and async paths) which is deprecated in favor of `NSBitmapImageRep`-based drawing — works fine for now
+- `dismissOnMouseMove` implemented in `PopupPanelController` (`Confirmed from code` — line 73); behavior needs real-world testing
 - Hotkey recorder in Preferences doesn't validate conflicts with system hotkeys

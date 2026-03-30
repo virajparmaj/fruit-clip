@@ -19,7 +19,8 @@ struct ClipboardPopupView: View {
 
     private var filteredItems: [ClipboardHistoryItem] {
         if searchText.isEmpty { return items }
-        return items.filter { $0.preview.localizedCaseInsensitiveContains(searchText) }
+        let query = searchText.lowercased()
+        return items.filter { $0.kind == .text && $0.preview.lowercased().contains(query) }
     }
 
     var body: some View {
@@ -139,10 +140,13 @@ struct ClipboardPopupView: View {
             }
             .onChange(of: selectedIndex) { _, new in
                 withAnimation(.easeOut(duration: 0.2)) {
-                    let scrollIdx = scrollAnchor == .top
-                        ? max(0, new - 1)
-                        : min(filteredItems.count - 1, new + 1)
-                    proxy.scrollTo(scrollIdx, anchor: scrollAnchor)
+                    if scrollAnchor == .bottom {
+                        // Going down: keep lookahead item pinned at bottom edge
+                        proxy.scrollTo(min(filteredItems.count - 1, new + 1), anchor: .bottom)
+                    } else {
+                        // Going up: minimum scroll to keep previous item visible — no position jump
+                        proxy.scrollTo(max(0, new - 1))
+                    }
                 }
             }
             .onKeyPress(.upArrow) {
