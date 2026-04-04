@@ -1,89 +1,82 @@
-# Fruit Clip
+# FruitClip
 <div align="center">
     <img src="fruit-clip.png" width="120" alt="Fruit Clip logo" />
 </div>
 
-A lightweight native macOS clipboard manager. Keeps your last 10 clipboard items (text and images) accessible via a global hotkey, with auto-paste back into the previously focused app.
+FruitClip is a lightweight native macOS clipboard manager that lives in your menu bar and lets you quickly reopen, search, and paste the things you copied most recently.
 
-## Features
+## App Preview
 
-- **Global hotkey** (default: `⌘⇧V`) opens a floating popup with clipboard history
-- **Keyboard-first navigation**: arrow keys to select, Enter to paste, Escape to dismiss
-- **Auto-paste**: selected items are pasted directly into the previous app
-- **Persisted history**: survives app relaunch (stored locally)
-- **Menu bar app**: no Dock icon, runs as a background agent
-- **Configurable hotkey** via Preferences
-- **Launch at Login** toggle
-- **Pause/Resume** clipboard monitoring
-- **Clear History** to remove all saved items
-- Supports **plain text** and **images**
+**Menu bar controls**
 
-## Requirements
+![FruitClip menu bar controls](docs/images/preview-menu-bar.png)
 
-- macOS 15.0+
-- Swift 6.0+ (included with Xcode or Command Line Tools)
-- **Accessibility permission** required for auto-paste (the app will prompt you)
+**Preferences**
 
-## Install & Run
+![FruitClip preferences](docs/images/preview-preferences.png)
 
-```bash
-# Clone and build
-cd fruit-clip
-./build.sh
+**Clipboard popup**
 
-# Run
-open FruitClip.app
-```
+![FruitClip clipboard popup](docs/images/preview-popup.png)
 
-The build script compiles with SPM, generates the app icon from `fruit-clip.png`, assembles a proper `.app` bundle with `Info.plist`, and ad-hoc code signs it.
+## What You Get
 
-Grant **Accessibility** permission when prompted on first launch (required for auto-paste).
+- **Menu bar clipboard manager** for macOS with a clean, native feel
+- **Global shortcut** to open your clipboard history from anywhere
+- **Text and image support** so common clipboard items are easy to reuse
+- **Search for text clips** right inside the popup
+- **Fast keyboard flow** with arrow keys, `Enter`, and number keys for quick selection
+- **Paste back into the previous app** automatically when Accessibility access is enabled
+- **Pin important clips** so they stay near the top
+- **Copy without auto-paste** when you want something back on the clipboard first
+- **Pause monitoring, clear history, and launch at login** from the menu bar or preferences
+- **Local-only storage** so your clipboard history stays on your Mac
 
-## Usage
+By default, FruitClip keeps up to **50 clipboard items** and lets you change that limit in the app settings.
 
-1. **Launch**: `open FruitClip.app` — a paperclip icon appears in the menu bar
-2. **Copy things**: text and images you copy are automatically captured (up to 10 items)
-3. **Open popup**: press `⌘⇧V` (or your configured hotkey)
-4. **Navigate**: `↑`/`↓` arrow keys to move selection
-5. **Paste**: `Enter` to paste the selected item into the previously focused app
-6. **Dismiss**: `Escape` or click outside the popup
-7. **Preferences**: click the menu bar icon → Preferences to change hotkey, toggle launch at login, or clear history
+## Quick Use
+
+1. Build and open the app.
+2. Copy text or images as you normally would.
+3. Press `⌘⇧V` to open FruitClip.
+4. Type to search text clips, or move through the list with the keyboard.
+5. Press `Enter` to paste the selected item back into the app you were using.
 
 ## Permissions
 
-- **Accessibility**: required for auto-paste (`System Settings → Privacy & Security → Accessibility`). Without it, selected items are still copied to your clipboard — you just need to paste manually with `⌘V`.
+FruitClip needs **Accessibility** permission for automatic paste into other apps.
 
-## Data Storage
+Without it, FruitClip still restores the selected item to your clipboard, and you can paste manually with `⌘V`.
 
-Clipboard history is stored locally at:
+## For Developers
 
-```
-~/Library/Application Support/com.veer.FruitClip/
-├── metadata.json    # Item index (timestamps, previews, hashes)
-└── *.dat            # Payload files (text/image data)
-```
-
-Use **Clear History** from the menu bar or Preferences to delete all stored data.
-
-## Architecture
-
-```
-Sources/FruitClip/
-├── App/           # App entry point + coordinator
-├── Models/        # ClipboardHistoryItem data model
-├── Storage/       # Clipboard monitoring + persistence
-├── Hotkey/        # Carbon global hotkey registration
-├── Popup/         # Floating NSPanel + SwiftUI list
-├── Paste/         # Clipboard restore + Cmd+V synthesis
-├── Settings/      # UserDefaults + Preferences UI
-├── StatusBar/     # Menu bar item
-└── Permissions/   # Accessibility permission handling
-```
-
-## Development
+### Option 1: Clone the repo
 
 ```bash
-swift build    # Debug build
-swift test     # Run unit tests
-./build.sh     # Release build + .app bundle
+git clone https://github.com/virajparmaj/fruit-clip
+cd fruit-clip
+swift build
+swift test
+./build.sh
+open FruitClip.app
 ```
+
+### Option 2: Download the ZIP locally
+
+1. Download the repository ZIP from GitHub.
+2. Extract it on your Mac.
+3. Open Terminal in the extracted `fruit-clip` folder.
+4. Run:
+
+```bash
+swift build
+swift test
+./build.sh
+open FruitClip.app
+```
+
+### Local Notes
+
+- Requires **macOS 15.0+**
+- Requires **Swift 6.0+** and Xcode 16 or Command Line Tools
+- The first launch may prompt for **Accessibility** access if you want auto-paste
