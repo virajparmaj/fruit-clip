@@ -34,10 +34,10 @@ final class PreferencesWindowController {
         )
 
         let hostingView = NSHostingView(rootView: prefsView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 370)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 480)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 370),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -128,7 +128,7 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 370)
+        .frame(width: 420, height: 480)
         .onAppear {
             hotkeyDisplay = formatHotkey(
                 keyCode: settingsStore.hotkeyKeyCode,
