@@ -29,7 +29,7 @@ final class StatusItemController {
 
         if let button = statusItem.button {
             if let image = StatusItemController.loadStatusIcon() {
-                image.size = NSSize(width: 18, height: 18)
+                image.size = NSSize(width: 22, height: 22)
                 button.image = image
             } else {
                 button.image = nil
@@ -41,15 +41,23 @@ final class StatusItemController {
     }
 
     private static func loadStatusIcon() -> NSImage? {
-        if let url = Bundle.module.url(forResource: "fruit-clip-status", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            image.isTemplate = false
-            return image
+        guard let url1x = Bundle.module.url(forResource: "fruit-clip-status", withExtension: "png"),
+              let image = NSImage(contentsOf: url1x) else {
+            let fallback = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "FruitClip")
+            fallback?.isTemplate = true
+            return fallback
+        }
+        image.isTemplate = false
+
+        // Add 2x representation for Retina displays
+        if let url2x = Bundle.module.url(forResource: "fruit-clip-status@2x", withExtension: "png"),
+           let data2x = try? Data(contentsOf: url2x),
+           let rep2x = NSBitmapImageRep(data: data2x) {
+            rep2x.size = NSSize(width: 22, height: 22)
+            image.addRepresentation(rep2x)
         }
 
-        let fallback = NSImage(systemSymbolName: "paperclip", accessibilityDescription: "FruitClip")
-        fallback?.isTemplate = true
-        return fallback
+        return image
     }
 
     func updateMenu() {
