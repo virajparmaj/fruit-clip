@@ -7,11 +7,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 SOURCE="$REPO_DIR/fruit-clip.png"
+MENUBAR_SOURCE="$REPO_DIR/fruit-clip Background Removed.png"
 ICON_OUT="$REPO_DIR/assets/icons/macos"
 RESOURCES="$REPO_DIR/Sources/FruitClip/Resources"
 
 if [ ! -f "$SOURCE" ]; then
     echo "Missing source: $SOURCE" >&2
+    exit 1
+fi
+
+if [ ! -f "$MENUBAR_SOURCE" ]; then
+    echo "Missing menubar source: $MENUBAR_SOURCE" >&2
     exit 1
 fi
 
@@ -37,12 +43,12 @@ for size in 16 32 64 128 256 512 1024; do
     echo "   fruit_clip_icon_${size}.png"
 done
 
-# Generate menu bar template images
+# Generate menu bar icons from background-removed source
 echo "→ Generating menu bar icons..."
-sips -z 18 18 "$WORK_DIR/canonical_1024.png" --out "$RESOURCES/menubar.png" >/dev/null
-sips -z 36 36 "$WORK_DIR/canonical_1024.png" --out "$RESOURCES/menubar@2x.png" >/dev/null
-echo "   menubar.png (18x18)"
-echo "   menubar@2x.png (36x36)"
+sips -z 22 22 "$MENUBAR_SOURCE" --out "$RESOURCES/fruit-clip-status.png" >/dev/null
+sips -z 44 44 "$MENUBAR_SOURCE" --out "$RESOURCES/fruit-clip-status@2x.png" >/dev/null
+echo "   fruit-clip-status.png (22x22)"
+echo "   fruit-clip-status@2x.png (44x44)"
 
 # Replace the oversized fruit-clip.png in Resources with the 512px variant
 cp "$ICON_OUT/fruit_clip_icon_512.png" "$RESOURCES/fruit-clip.png"
