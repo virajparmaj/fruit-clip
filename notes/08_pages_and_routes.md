@@ -61,4 +61,4 @@ Size: 340×380pt. Positioned at screen center.
 │    [Clear History]                   │
 └──────────────────────────────────────┘
 ```
-Size: 420×370pt. Standard titled closable NSWindow.
+Size: 420×480pt. Standard titled closable NSWindow.

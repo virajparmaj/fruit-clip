@@ -39,7 +39,7 @@ System colors used elsewhere: `.primary`, `.secondary`, `.tertiary`, `.accentCol
 - Image thumbnails: 32×32 display, 64×64 cached, `cornerRadius: 6`
 - Search bar: `padding(.horizontal, 12)`, `padding(.vertical, 8)`
 - Divider: `opacity(0.3)`
-- Preferences window: 420×370pt
+- Preferences window: 420×480pt
 
 ## Animation
 
