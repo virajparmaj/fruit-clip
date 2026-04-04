@@ -6,6 +6,53 @@ BUNDLE_ID="com.veer.FruitClip"
 VERSION="1.0"
 BUILD_DIR=".build/release"
 APP_BUNDLE="${APP_NAME}.app"
+ICON_SOURCE_DIR="assets/icons/macos"
+RUNTIME_ICON_NAME="AppIconRuntime.png"
+
+# Icon normalization ratios (resize artwork then pad to full canvas).
+# Bundle icons appear in Finder / Applications / Launchpad.
+# Dock/runtime icons appear in Activity Monitor / Force Quit / Settings.
+TARGET_ALPHA_BOUNDS_RATIO="0.82"
+DOCK_ICON_BOUNDS_RATIO="0.72"
+
+copy_icon_variant() {
+    local source_size="$1"
+    local dest_name="$2"
+    local work_dir="$3"
+    local source_path="$work_dir/fruit_clip_icon_${source_size}.png"
+
+    if [ ! -f "$source_path" ]; then
+        echo "Missing icon source: $source_path" >&2
+        exit 1
+    fi
+
+    cp "$source_path" "$ICONSET/$dest_name"
+}
+
+normalize_icon_set() {
+    local work_dir="$1"
+    local ratio="$2"
+
+    cp "$ICON_SOURCE_DIR"/fruit_clip_icon_*.png "$work_dir"/
+    for size in 16 32 64 128 256 512 1024; do
+        local target_size
+        target_size="$(python3 - "$size" "$ratio" <<'PY'
+import sys
+
+size = int(sys.argv[1])
+ratio = float(sys.argv[2])
+print(max(1, int(round(size * ratio))))
+PY
+)"
+        sips -z "$target_size" "$target_size" \
+            "$work_dir/fruit_clip_icon_${size}.png" \
+            --out "$work_dir/fruit_clip_icon_${size}.scaled.png" >/dev/null
+        sips -p "$size" "$size" \
+            "$work_dir/fruit_clip_icon_${size}.scaled.png" \
+            --out "$work_dir/fruit_clip_icon_${size}.png" >/dev/null
+        rm -f "$work_dir/fruit_clip_icon_${size}.scaled.png"
+    done
+}
 
 echo "Building ${APP_NAME}..."
 swift build -c release
@@ -17,28 +64,44 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
-# Generate app icon from fruit-clip.png if present
-ICON_SOURCE="fruit-clip.png"
-ICON_DEST="${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
-if [ -f "${ICON_SOURCE}" ]; then
-    echo "Generating app icon..."
-    ICONSET_DIR="$(mktemp -d)/AppIcon.iconset"
-    mkdir -p "${ICONSET_DIR}"
-    sips -z 16 16     "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_16x16.png"     > /dev/null
-    sips -z 32 32     "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_16x16@2x.png"  > /dev/null
-    sips -z 32 32     "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_32x32.png"     > /dev/null
-    sips -z 64 64     "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_32x32@2x.png"  > /dev/null
-    sips -z 128 128   "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_128x128.png"   > /dev/null
-    sips -z 256 256   "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_128x128@2x.png"> /dev/null
-    sips -z 256 256   "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_256x256.png"   > /dev/null
-    sips -z 512 512   "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_256x256@2x.png"> /dev/null
-    sips -z 512 512   "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_512x512.png"   > /dev/null
-    sips -z 1024 1024 "${ICON_SOURCE}" --out "${ICONSET_DIR}/icon_512x512@2x.png"> /dev/null
-    iconutil --convert icns "${ICONSET_DIR}" --output "${ICON_DEST}"
-    rm -rf "$(dirname "${ICONSET_DIR}")"
-else
-    echo "Warning: ${ICON_SOURCE} not found — skipping app icon."
-fi
+# Preflight: verify icon source variants exist
+for size in 16 32 64 128 256 512 1024; do
+    if [ ! -f "$ICON_SOURCE_DIR/fruit_clip_icon_${size}.png" ]; then
+        echo "Missing icon source: $ICON_SOURCE_DIR/fruit_clip_icon_${size}.png" >&2
+        echo "Run scripts/generate_icons.sh first." >&2
+        exit 1
+    fi
+done
+
+# Normalize icon artwork with resize+pad for proper visual weight
+WORK_DIR="$(mktemp -d)"
+BUNDLE_WORK_DIR="$WORK_DIR/bundle"
+DOCK_WORK_DIR="$WORK_DIR/dock"
+mkdir -p "$BUNDLE_WORK_DIR" "$DOCK_WORK_DIR"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+echo "   Normalizing bundle icons (ratio ${TARGET_ALPHA_BOUNDS_RATIO})..."
+normalize_icon_set "$BUNDLE_WORK_DIR" "$TARGET_ALPHA_BOUNDS_RATIO"
+echo "   Normalizing runtime icons (ratio ${DOCK_ICON_BOUNDS_RATIO})..."
+normalize_icon_set "$DOCK_WORK_DIR" "$DOCK_ICON_BOUNDS_RATIO"
+
+# Assemble AppIcon.iconset
+ICONSET="${APP_BUNDLE}/Contents/Resources/AppIcon.iconset"
+mkdir -p "$ICONSET"
+copy_icon_variant 16   "icon_16x16.png"      "$BUNDLE_WORK_DIR"
+copy_icon_variant 32   "icon_16x16@2x.png"   "$BUNDLE_WORK_DIR"
+copy_icon_variant 32   "icon_32x32.png"       "$BUNDLE_WORK_DIR"
+copy_icon_variant 64   "icon_32x32@2x.png"    "$BUNDLE_WORK_DIR"
+copy_icon_variant 128  "icon_128x128.png"     "$BUNDLE_WORK_DIR"
+copy_icon_variant 256  "icon_128x128@2x.png"  "$BUNDLE_WORK_DIR"
+copy_icon_variant 256  "icon_256x256.png"      "$BUNDLE_WORK_DIR"
+copy_icon_variant 512  "icon_256x256@2x.png"  "$BUNDLE_WORK_DIR"
+copy_icon_variant 512  "icon_512x512.png"      "$BUNDLE_WORK_DIR"
+copy_icon_variant 1024 "icon_512x512@2x.png"  "$BUNDLE_WORK_DIR"
+iconutil -c icns "$ICONSET" -o "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+cp "$DOCK_WORK_DIR/fruit_clip_icon_512.png" "${APP_BUNDLE}/Contents/Resources/$RUNTIME_ICON_NAME"
+rm -rf "$ICONSET"
+echo "   Icon resources: AppIcon.icns, $RUNTIME_ICON_NAME"
 
 cat > "${APP_BUNDLE}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
