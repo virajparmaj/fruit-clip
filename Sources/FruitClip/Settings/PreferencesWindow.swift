@@ -23,7 +23,7 @@ final class PreferencesWindowController {
     func showWindow() {
         if let existing = window, existing.isVisible {
             existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
@@ -49,7 +49,7 @@ final class PreferencesWindowController {
 
         self.window = window
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 }
 
@@ -159,7 +159,18 @@ struct PreferencesView: View {
                 try service.unregister()
             }
         } catch {
-            // Silently fail — SMAppService may not work without proper bundle
+            // Roll back the toggle so the UI reflects the actual state.
+            settingsStore.launchAtLogin = !enabled
+
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Launch at Login could not be \(enabled ? "enabled" : "disabled")."
+            alert.informativeText = """
+                Make sure FruitClip is installed in /Applications and launched from there.
+
+                \(error.localizedDescription)
+                """
+            alert.runModal()
         }
     }
 

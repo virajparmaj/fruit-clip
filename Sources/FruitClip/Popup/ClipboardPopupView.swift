@@ -20,7 +20,7 @@ struct ClipboardPopupView: View {
     private var filteredItems: [ClipboardHistoryItem] {
         if searchText.isEmpty { return items }
         let query = searchText.lowercased()
-        return items.filter { $0.kind == .text && $0.preview.lowercased().contains(query) }
+        return items.filter { $0.preview.lowercased().contains(query) }
     }
 
     var body: some View {

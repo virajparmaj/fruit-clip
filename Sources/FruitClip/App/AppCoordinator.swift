@@ -43,6 +43,14 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         hotkeyManager = GlobalHotkeyManager(settingsStore: settingsStore) { [weak self] in
             self?.togglePopup()
         }
+        hotkeyManager.onRegistrationFailed = { [weak self] message in
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Hotkey Conflict"
+            alert.informativeText = message
+            alert.runModal()
+            self?.showPreferences()
+        }
         hotkeyManager.register()
 
         statusItemController = StatusItemController(

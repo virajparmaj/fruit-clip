@@ -3,6 +3,10 @@ import SwiftUI
 
 @MainActor
 final class PopupPanelController {
+    // Accumulated mouse delta (points) before the popup auto-dismisses.
+    // 50pts ≈ a quarter-inch on a trackpad; 10 was hair-trigger on high-res input devices.
+    private let mouseDismissThreshold: CGFloat = 50
+
     private var panel: FloatingPanel?
     private var clickMonitor: Any?
     private var mouseMoveMonitor: Any?
@@ -76,7 +80,7 @@ final class PopupPanelController {
                 [weak self] event in
                 guard let self else { return }
                 self.accumulatedMouseDelta += abs(event.deltaX) + abs(event.deltaY)
-                if self.accumulatedMouseDelta > 10 {
+                if self.accumulatedMouseDelta > self.mouseDismissThreshold {
                     self.dismiss()
                 }
             }

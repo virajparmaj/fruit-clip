@@ -8,6 +8,9 @@ final class GlobalHotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
+    // Called when RegisterEventHotKey fails (e.g., combo already claimed by another app).
+    var onRegistrationFailed: ((String) -> Void)?
+
     private static let hotkeyID = EventHotKeyID(signature: 0x4643_4C50, id: 1)  // "FCLP"
 
     init(settingsStore: SettingsStore, onActivate: @escaping @MainActor () -> Void) {
@@ -35,7 +38,7 @@ final class GlobalHotkeyManager {
 
         let hotkeyID = GlobalHotkeyManager.hotkeyID
 
-        RegisterEventHotKey(
+        let registrationStatus = RegisterEventHotKey(
             settingsStore.hotkeyKeyCode,
             settingsStore.hotkeyModifiers,
             hotkeyID,
@@ -43,6 +46,14 @@ final class GlobalHotkeyManager {
             0,
             &hotKeyRef
         )
+
+        if registrationStatus != noErr {
+            let combo = HotkeyFormatter.format(
+                keyCode: settingsStore.hotkeyKeyCode,
+                modifiers: settingsStore.hotkeyModifiers
+            )
+            onRegistrationFailed?("The hotkey \(combo) is already in use by another app. Please choose a different shortcut in Preferences.")
+        }
     }
 
     func unregister() {

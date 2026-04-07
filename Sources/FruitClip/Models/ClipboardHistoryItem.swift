@@ -1,6 +1,14 @@
 import CryptoKit
 import Foundation
 
+// Wraps the item list with a schema version so future model changes can be migrated
+// gracefully instead of silently falling back to an empty history.
+struct StorageEnvelope: Codable {
+    static let currentVersion = 1
+    let schemaVersion: Int
+    let items: [ClipboardHistoryItem]
+}
+
 struct ClipboardHistoryItem: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     let kind: Kind

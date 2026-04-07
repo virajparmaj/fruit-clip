@@ -3,7 +3,15 @@ set -euo pipefail
 
 APP_NAME="FruitClip"
 BUNDLE_ID="com.veer.FruitClip"
-VERSION="1.0"
+
+# Read version from VERSION file, then git tag, then fall back to "1.0".
+if [ -f VERSION ]; then
+    VERSION="$(tr -d '[:space:]' < VERSION)"
+elif git describe --tags --exact-match HEAD 2>/dev/null; then
+    VERSION="$(git describe --tags --exact-match HEAD)"
+else
+    VERSION="1.0"
+fi
 BUILD_DIR=".build/release"
 APP_BUNDLE="${APP_NAME}.app"
 ICON_SOURCE_DIR="assets/icons/macos"

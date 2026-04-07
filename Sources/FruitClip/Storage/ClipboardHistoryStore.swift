@@ -233,7 +233,18 @@ final class ClipboardHistoryStore: ObservableObject {
         guard FileManager.default.fileExists(atPath: metadataURL.path) else { return }
         do {
             let data = try Data(contentsOf: metadataURL)
-            items = try JSONDecoder().decode([ClipboardHistoryItem].self, from: data)
+            let decoder = JSONDecoder()
+
+            // Try the versioned envelope first; fall back to the legacy unversioned array
+            // so existing installs migrate automatically on first load.
+            if let envelope = try? decoder.decode(StorageEnvelope.self, from: data) {
+                items = envelope.items
+            } else {
+                logger.info("Migrating metadata.json from legacy unversioned format to schema v\(StorageEnvelope.currentVersion).")
+                items = try decoder.decode([ClipboardHistoryItem].self, from: data)
+                saveMetadata()  // Re-save immediately in the new envelope format.
+            }
+
             // Remove items whose payload files are missing
             items = items.filter { item in
                 FileManager.default.fileExists(
@@ -247,7 +258,8 @@ final class ClipboardHistoryStore: ObservableObject {
 
     private func saveMetadata() {
         do {
-            let data = try JSONEncoder().encode(items)
+            let envelope = StorageEnvelope(schemaVersion: StorageEnvelope.currentVersion, items: items)
+            let data = try JSONEncoder().encode(envelope)
             try data.write(to: metadataURL)
         } catch {
             logger.error("Failed to save metadata: \(error.localizedDescription)")
