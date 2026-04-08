@@ -5,3 +5,24 @@ FruitClip.app/
 xcuserdata/
 DerivedData/
 .DS_Store
+
+# Xcode user-specific state
+*.xcuserstate
+*.xcscmblueprint
+
+# Generated icon bundles
+*.icns
+
+# Editor junk
+.idea/
+*.swp
+*~
+desktop.ini
+Thumbs.db
+
+# Design source artifacts (not needed for building)
+fruit-clip Background Removed.png
+
+# Empty stub notes (local only)
+notes/04_auth_and_roles.md
+notes/05_database_schema.md
