@@ -67,13 +67,13 @@ final class StatusItemController {
     private func buildMenu() {
         let menu = NSMenu()
 
-        let openItem = NSMenuItem(title: "Open Clipboard", action: #selector(handleOpen), keyEquivalent: "")
+        let openItem = NSMenuItem(title: "Open Board", action: #selector(handleOpen), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
 
         menu.addItem(.separator())
 
-        let prefsItem = NSMenuItem(title: "Preferences...", action: #selector(handlePreferences), keyEquivalent: ",")
+        let prefsItem = NSMenuItem(title: "Settings...", action: #selector(handlePreferences), keyEquivalent: ",")
         prefsItem.target = self
         menu.addItem(prefsItem)
 
@@ -84,7 +84,7 @@ final class StatusItemController {
 
         menu.addItem(.separator())
 
-        let clearItem = NSMenuItem(title: "Clear History", action: #selector(handleClearHistory), keyEquivalent: "")
+        let clearItem = NSMenuItem(title: "Clear Board", action: #selector(handleClearHistory), keyEquivalent: "")
         clearItem.target = self
         menu.addItem(clearItem)
 

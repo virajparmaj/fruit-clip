@@ -1,19 +1,39 @@
 import Carbon
 import Foundation
 
+enum GlobalHotkeyAction: UInt32, CaseIterable, Equatable {
+    case openBoard = 1
+    case openStar = 2
+
+    var title: String {
+        switch self {
+        case .openBoard: "Open Board"
+        case .openStar: "Open Star"
+        }
+    }
+}
+
+struct HotkeyRegistration: Equatable {
+    let action: GlobalHotkeyAction
+    let shortcut: ShortcutConfiguration
+}
+
 @MainActor
 final class GlobalHotkeyManager {
     private let settingsStore: SettingsStore
-    private let onActivate: () -> Void
-    private var hotKeyRef: EventHotKeyRef?
+    private let onActivate: (GlobalHotkeyAction) -> Void
+    private var hotKeyRefs: [GlobalHotkeyAction: EventHotKeyRef] = [:]
     private var handlerRef: EventHandlerRef?
 
     // Called when RegisterEventHotKey fails (e.g., combo already claimed by another app).
     var onRegistrationFailed: ((String) -> Void)?
 
-    private static let hotkeyID = EventHotKeyID(signature: 0x4643_4C50, id: 1)  // "FCLP"
+    private static let signature: OSType = 0x4643_4C50  // "FCLP"
 
-    init(settingsStore: SettingsStore, onActivate: @escaping @MainActor () -> Void) {
+    init(
+        settingsStore: SettingsStore,
+        onActivate: @escaping @MainActor (GlobalHotkeyAction) -> Void
+    ) {
         self.settingsStore = settingsStore
         self.onActivate = onActivate
     }
@@ -36,31 +56,41 @@ final class GlobalHotkeyManager {
 
         guard status == noErr else { return }
 
-        let hotkeyID = GlobalHotkeyManager.hotkeyID
-
-        let registrationStatus = RegisterEventHotKey(
-            settingsStore.hotkeyKeyCode,
-            settingsStore.hotkeyModifiers,
-            hotkeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
-
-        if registrationStatus != noErr {
-            let combo = HotkeyFormatter.format(
-                keyCode: settingsStore.hotkeyKeyCode,
-                modifiers: settingsStore.hotkeyModifiers
+        for registration in configuredHotkeys() {
+            let hotkeyID = EventHotKeyID(
+                signature: GlobalHotkeyManager.signature,
+                id: registration.action.rawValue
             )
-            onRegistrationFailed?("The hotkey \(combo) is already in use by another app. Please choose a different shortcut in Preferences.")
+
+            var hotKeyRef: EventHotKeyRef?
+            let registrationStatus = RegisterEventHotKey(
+                registration.shortcut.keyCode,
+                registration.shortcut.modifiers,
+                hotkeyID,
+                GetApplicationEventTarget(),
+                0,
+                &hotKeyRef
+            )
+
+            if registrationStatus != noErr {
+                let combo = HotkeyFormatter.format(registration.shortcut)
+                onRegistrationFailed?(
+                    "The shortcut \(combo) for \(registration.action.title) is already in use by another app. Please choose a different shortcut in Settings."
+                )
+                continue
+            }
+
+            if let hotKeyRef {
+                hotKeyRefs[registration.action] = hotKeyRef
+            }
         }
     }
 
     func unregister() {
-        if let ref = hotKeyRef {
+        for ref in hotKeyRefs.values {
             UnregisterEventHotKey(ref)
-            hotKeyRef = nil
         }
+        hotKeyRefs.removeAll()
         if let ref = handlerRef {
             RemoveEventHandler(ref)
             handlerRef = nil
@@ -71,8 +101,22 @@ final class GlobalHotkeyManager {
         register()
     }
 
-    fileprivate func handleHotkey() {
-        onActivate()
+    func configuredHotkeys() -> [HotkeyRegistration] {
+        var registrations = [
+            HotkeyRegistration(action: .openBoard, shortcut: settingsStore.openBoardShortcut)
+        ]
+
+        if let starShortcut = settingsStore.activeOpenStarShortcut {
+            registrations.append(
+                HotkeyRegistration(action: .openStar, shortcut: starShortcut)
+            )
+        }
+
+        return registrations
+    }
+
+    fileprivate func handleHotkey(_ action: GlobalHotkeyAction) {
+        onActivate(action)
     }
 
     deinit {
@@ -88,8 +132,26 @@ private func globalHotkeyCallback(
 ) -> OSStatus {
     guard let userData else { return OSStatus(eventNotHandledErr) }
     let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+
+    guard let event else { return OSStatus(eventNotHandledErr) }
+
+    var hotkeyID = EventHotKeyID()
+    let status = GetEventParameter(
+        event,
+        EventParamName(kEventParamDirectObject),
+        EventParamType(typeEventHotKeyID),
+        nil,
+        MemoryLayout<EventHotKeyID>.size,
+        nil,
+        &hotkeyID
+    )
+
+    guard status == noErr, let action = GlobalHotkeyAction(rawValue: hotkeyID.id) else {
+        return OSStatus(eventNotHandledErr)
+    }
+
     DispatchQueue.main.async { @MainActor in
-        manager.handleHotkey()
+        manager.handleHotkey(action)
     }
     return noErr
 }

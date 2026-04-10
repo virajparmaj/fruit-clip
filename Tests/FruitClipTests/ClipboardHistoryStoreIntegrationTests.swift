@@ -16,11 +16,44 @@ struct ClipboardHistoryStoreIntegrationTests {
     private func makeStore(dir: URL, maxHistory: Int = 50) -> (ClipboardHistoryStore, SettingsStore) {
         let suiteName = "com.veer.FruitClip.test.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
+        return makeStore(dir: dir, defaults: defaults, maxHistory: maxHistory)
+    }
+
+    private func makeStore(
+        dir: URL,
+        defaults: UserDefaults,
+        maxHistory: Int = 50
+    ) -> (ClipboardHistoryStore, SettingsStore) {
         let settings = SettingsStore(defaults: defaults)
         settings.maxHistoryCount = maxHistory
         let store = ClipboardHistoryStore(settingsStore: settings, storageDirectory: dir)
         store.stopPolling()
         return (store, settings)
+    }
+
+    private func writeItem(
+        text: String,
+        dir: URL,
+        timestamp: Date = Date(),
+        isStarred: Bool = false
+    ) throws -> ClipboardHistoryItem {
+        let data = Data(text.utf8)
+        let hash = ClipboardHistoryItem.computeHash(of: data)
+        let filename = "\(UUID().uuidString).dat"
+        try data.write(to: dir.appendingPathComponent(filename))
+        return ClipboardHistoryItem(
+            timestamp: timestamp,
+            kind: .text,
+            contentHash: hash,
+            preview: text,
+            payloadFilename: filename,
+            isStarred: isStarred
+        )
+    }
+
+    private func writeMetadata(_ items: [ClipboardHistoryItem], dir: URL) throws {
+        let encoded = try JSONEncoder().encode(items)
+        try encoded.write(to: dir.appendingPathComponent("metadata.json"))
     }
 
     private func addTextItem(_ store: ClipboardHistoryStore, text: String) {
@@ -187,11 +220,10 @@ struct ClipboardHistoryStoreIntegrationTests {
             atPath: dir.appendingPathComponent(itemToDelete.payloadFilename).path))
     }
 
-    @Test("Pinned items survive pruning")
-    func pinSurvivesPrune() throws {
+    @Test("Stars survive Board pruning")
+    func starsSurviveBoardPrune() throws {
         let dir = makeTempDir()
 
-        // Create 5 items, pin item at index 4 (oldest)
         var items: [ClipboardHistoryItem] = []
         for i in 0..<5 {
             let text = "item\(i)"
@@ -201,7 +233,7 @@ struct ClipboardHistoryStoreIntegrationTests {
             try data.write(to: dir.appendingPathComponent(filename))
             items.append(ClipboardHistoryItem(
                 kind: .text, contentHash: hash, preview: text, payloadFilename: filename,
-                isPinned: i == 4))  // Pin the last (oldest) item
+                isStarred: i == 4))
         }
         let encoded = try JSONEncoder().encode(items)
         try encoded.write(to: dir.appendingPathComponent("metadata.json"))
@@ -209,16 +241,13 @@ struct ClipboardHistoryStoreIntegrationTests {
         let (store, _) = makeStore(dir: dir, maxHistory: 3)
         store.stopPolling()
 
-        // After loading, store should have pruned to 3 unpinned + kept pinned
-        // But pruning only happens on addItem, so let's trigger it manually via togglePin
-        // Actually, the store loads all 5 items. Pruning only happens on addItem.
-        // We verify the pruning logic works by checking the pinned item's presence
-        #expect(store.items.count == 5)
-        #expect(store.items.contains(where: { $0.isPinned }))
+        #expect(store.items.count == 4)
+        #expect(store.items.filter { !$0.isStarred }.count == 3)
+        #expect(store.items.contains(where: { $0.isStarred }))
     }
 
-    @Test("Toggle pin moves item to top section")
-    func togglePinMovesToTop() throws {
+    @Test("Toggle star preserves Board ordering")
+    func toggleStarPreservesBoardOrder() throws {
         let dir = makeTempDir()
 
         var items: [ClipboardHistoryItem] = []
@@ -238,11 +267,132 @@ struct ClipboardHistoryStoreIntegrationTests {
         store.stopPolling()
 
         let lastItem = store.items[2]
-        store.togglePin(lastItem)
+        store.toggleStar(lastItem)
 
-        // Pinned item should now be at position 0
-        #expect(store.items[0].id == lastItem.id)
-        #expect(store.items[0].isPinned == true)
+        #expect(store.items[2].id == lastItem.id)
+        #expect(store.items[2].isStarred == true)
+    }
+
+    @Test("Board retention removes only non-starred items")
+    func boardRetentionRemovesOnlyBoardItems() throws {
+        let dir = makeTempDir()
+        let defaults = UserDefaults(suiteName: "com.veer.FruitClip.test.\(UUID().uuidString)")!
+        let (store, settings) = makeStore(dir: dir, defaults: defaults)
+        store.stopPolling()
+
+        settings.boardRetentionPolicy = .oneDay
+        settings.starRetentionPolicy = .threeMonths
+
+        let expiredDate = Date().addingTimeInterval(-(2 * 24 * 60 * 60))
+        let boardItem = try writeItem(
+            text: "board-old",
+            dir: dir,
+            timestamp: expiredDate,
+            isStarred: false
+        )
+        let starItem = try writeItem(
+            text: "star-old",
+            dir: dir,
+            timestamp: expiredDate,
+            isStarred: true
+        )
+        try writeMetadata([boardItem, starItem], dir: dir)
+
+        let (reloadedStore, _) = makeStore(dir: dir, defaults: defaults)
+        reloadedStore.stopPolling()
+
+        #expect(reloadedStore.items.count == 1)
+        #expect(reloadedStore.items[0].id == starItem.id)
+    }
+
+    @Test("Star retention removes only starred items")
+    func starRetentionRemovesOnlyStarredItems() throws {
+        let dir = makeTempDir()
+        let defaults = UserDefaults(suiteName: "com.veer.FruitClip.test.\(UUID().uuidString)")!
+        let (store, settings) = makeStore(dir: dir, defaults: defaults)
+        store.stopPolling()
+
+        settings.boardRetentionPolicy = .never
+        settings.starRetentionPolicy = .oneDay
+
+        let expiredDate = Date().addingTimeInterval(-(2 * 24 * 60 * 60))
+        let boardItem = try writeItem(
+            text: "board-kept",
+            dir: dir,
+            timestamp: expiredDate,
+            isStarred: false
+        )
+        let starItem = try writeItem(
+            text: "star-expired",
+            dir: dir,
+            timestamp: expiredDate,
+            isStarred: true
+        )
+        try writeMetadata([boardItem, starItem], dir: dir)
+
+        let (reloadedStore, _) = makeStore(dir: dir, defaults: defaults)
+        reloadedStore.stopPolling()
+
+        #expect(reloadedStore.items.count == 1)
+        #expect(reloadedStore.items[0].id == boardItem.id)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: dir.appendingPathComponent(starItem.payloadFilename).path
+            )
+        )
+    }
+
+    @Test("Clear Board keeps starred clips")
+    func clearBoardKeepsStarredClips() throws {
+        let dir = makeTempDir()
+
+        let boardItem = try writeItem(text: "board", dir: dir)
+        let starItem = try writeItem(text: "star", dir: dir, isStarred: true)
+        try writeMetadata([boardItem, starItem], dir: dir)
+
+        let (store, _) = makeStore(dir: dir)
+        store.stopPolling()
+
+        store.clearBoard()
+
+        #expect(store.items.count == 1)
+        #expect(store.items[0].id == starItem.id)
+        #expect(!FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent(boardItem.payloadFilename).path))
+        #expect(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent(starItem.payloadFilename).path))
+    }
+
+    @Test("Legacy favorite metadata loads clips but clears starred state")
+    func legacyFavoriteMetadataLoadsUnstarred() throws {
+        let dir = makeTempDir()
+
+        let data = Data("legacy".utf8)
+        let hash = ClipboardHistoryItem.computeHash(of: data)
+        let filename = "\(UUID().uuidString).dat"
+        try data.write(to: dir.appendingPathComponent(filename))
+
+        let legacyMetadata = """
+        [
+          {
+            "id": "\(UUID().uuidString)",
+            "kind": "text",
+            "timestamp": \(Date().timeIntervalSinceReferenceDate),
+            "contentHash": "\(hash)",
+            "preview": "legacy star",
+            "payloadFilename": "\(filename)",
+            "isFavorite": true
+          }
+        ]
+        """.data(using: .utf8)!
+        try legacyMetadata.write(to: dir.appendingPathComponent("metadata.json"))
+
+        let (store, _) = makeStore(dir: dir)
+        store.stopPolling()
+
+        #expect(store.items.count == 1)
+        #expect(store.items[0].preview == "legacy star")
+        #expect(store.items[0].isStarred == false)
     }
 
     @Test("Full-history dedup blocks non-consecutive duplicates")

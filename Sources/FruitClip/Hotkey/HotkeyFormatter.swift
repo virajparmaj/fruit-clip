@@ -12,6 +12,11 @@ enum HotkeyFormatter {
         return parts.joined()
     }
 
+    static func format(_ shortcut: ShortcutConfiguration?) -> String {
+        guard let shortcut else { return "Set Shortcut" }
+        return format(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers)
+    }
+
     static func keyCodeToString(_ keyCode: UInt32) -> String {
         let keyMap: [UInt32: String] = [
             0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
@@ -38,6 +43,13 @@ enum HotkeyFormatter {
             0x74: "PgUp", 0x79: "PgDn",
         ]
         return keyMap[keyCode] ?? "?"
+    }
+
+    static func normalizedKeyToken(for keyCode: UInt32) -> String {
+        switch keyCodeToString(keyCode) {
+        case "Space": " "
+        default: keyCodeToString(keyCode).lowercased()
+        }
     }
 
     static func cocoaToCarbonModifiers(_ flags: UInt) -> UInt32 {

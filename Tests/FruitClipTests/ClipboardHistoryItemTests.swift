@@ -11,7 +11,8 @@ struct ClipboardHistoryItemTests {
             kind: .text,
             contentHash: "abc123",
             preview: "Hello world",
-            payloadFilename: "test.dat"
+            payloadFilename: "test.dat",
+            isStarred: true
         )
 
         let encoded = try JSONEncoder().encode(item)
@@ -22,6 +23,7 @@ struct ClipboardHistoryItemTests {
         #expect(decoded.contentHash == item.contentHash)
         #expect(decoded.preview == item.preview)
         #expect(decoded.payloadFilename == item.payloadFilename)
+        #expect(decoded.isStarred == true)
     }
 
     @Test("Content hash is deterministic")
@@ -51,6 +53,27 @@ struct ClipboardHistoryItemTests {
         let encoded = try JSONEncoder().encode(item)
         let decoded = try JSONDecoder().decode(ClipboardHistoryItem.self, from: encoded)
         #expect(decoded.kind == .image)
+    }
+
+    @Test("Legacy favorite flag is ignored and defaults to unstarred")
+    func legacyFavoriteFlagIgnored() throws {
+        let payload = """
+        {
+          "id": "\(UUID().uuidString)",
+          "kind": "text",
+          "timestamp": "\(ISO8601DateFormatter().string(from: Date()))",
+          "contentHash": "legacy",
+          "preview": "Old favorite item",
+          "payloadFilename": "legacy.dat",
+          "isFavorite": true
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let item = try decoder.decode(ClipboardHistoryItem.self, from: payload)
+
+        #expect(item.isStarred == false)
     }
 
     @Test("Timestamp is set near current time on init")

@@ -2,89 +2,160 @@ import AppKit
 import SwiftUI
 
 private let fruitClipBlue = Color(red: 0.2, green: 0.5, blue: 1.0)
+private let fruitClipGold = Color(red: 0.97, green: 0.8, blue: 0.24)
+private let fruitClipDelete = Color(red: 0.92, green: 0.32, blue: 0.36)
+private let popupRowHeight: CGFloat = 72
+private let popupRowCornerRadius: CGFloat = 13
+private let popupThumbnailSize: CGFloat = 44
+private let popupRowTrailingInset: CGFloat = 50
 
 struct ClipboardPopupView: View {
-    let items: [ClipboardHistoryItem]
+    @ObservedObject var historyStore: ClipboardHistoryStore
+    @ObservedObject var settingsStore: SettingsStore
+    @ObservedObject var presentationState: PopupPresentationState
+
     let onSelect: (ClipboardHistoryItem) -> Void
     let onCopy: (ClipboardHistoryItem) -> Void
     let onDelete: (ClipboardHistoryItem) -> Void
-    let onTogglePin: (ClipboardHistoryItem) -> Void
+    let onToggleStar: (ClipboardHistoryItem) -> Void
     let onDismiss: () -> Void
 
-    @State private var selectedIndex: Int = 0
+    @State private var selectedItemID: UUID?
     @State private var searchText: String = ""
-    @State private var scrollAnchor: UnitPoint = .top
+    @State private var pendingScrollRequest: PopupScrollRequest?
+    @State private var deletingItemIDs: Set<UUID> = []
     @FocusState private var isSearchFocused: Bool
-    @FocusState private var isListFocused: Bool
+
+    private var activeTab: PopupTab { presentationState.activeTab }
 
     private var filteredItems: [ClipboardHistoryItem] {
-        if searchText.isEmpty { return items }
+        let baseItems = historyStore.items.filter {
+            activeTab == .board || $0.isStarred
+        }
+
+        guard !searchText.isEmpty else { return baseItems }
+
         let query = searchText.lowercased()
-        return items.filter { $0.preview.lowercased().contains(query) }
+        return baseItems.filter { $0.preview.lowercased().contains(query) }
     }
+
+    private var selectedItem: ClipboardHistoryItem? {
+        guard let selectedItemID else { return filteredItems.first }
+        return filteredItems.first(where: { $0.id == selectedItemID }) ?? filteredItems.first
+    }
+
+    private var selectedIndex: Int? {
+        guard let selectedItem else { return nil }
+        return filteredItems.firstIndex(where: { $0.id == selectedItem.id })
+    }
+
+    private var popupKeyboardState: PopupKeyboardState {
+        PopupKeyboardState(
+            inputMode: presentationState.inputMode,
+            activeTab: activeTab,
+            selectedIndex: selectedIndex,
+            visibleItemCount: filteredItems.count,
+            hasSearchText: !searchText.isEmpty
+        )
+    }
+
+    private var visibleIDs: [UUID] { filteredItems.map(\.id) }
+    private var popupTextSize: CGFloat { CGFloat(settingsStore.popupFontSize) }
+    private var popupCaptionSize: CGFloat { max(popupTextSize - 2, 9) }
+    private var popupChipLabelSize: CGFloat { max(popupTextSize - 1, 10) }
+    private var popupTitleSize: CGFloat { popupTextSize + 4 }
+    private var popupTabFontSize: CGFloat { max(popupTextSize - 1, 11) }
 
     var body: some View {
         VStack(spacing: 0) {
+            header
             searchBar
-            Divider().opacity(0.3)
+            Divider().opacity(0.14)
+
             if filteredItems.isEmpty {
                 emptyState
             } else {
                 itemList
             }
+
+            footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 18)
                 .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color.black.opacity(0.26))
+                )
         )
-        .overlay(AnimatedGradientBorder(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(AnimatedGradientBorder(cornerRadius: 18))
+        .background(PopupKeyMonitor(onKeyDown: handlePopupKeyEvent))
         .padding(8)
         .onAppear {
-            selectedIndex = 0
-            // Defer focus so the window is fully key before SwiftUI assigns first responder
-            DispatchQueue.main.async {
-                isSearchFocused = true
+            handleActivationReset()
+        }
+        .onChange(of: presentationState.activationID) { _, _ in
+            handleActivationReset()
+        }
+        .onChange(of: presentationState.inputMode) { _, newMode in
+            switch newMode {
+            case .search:
+                focusSearchField()
+            case .list:
+                isSearchFocused = false
             }
+        }
+        .onChange(of: isSearchFocused) { _, isFocused in
+            if isFocused && presentationState.inputMode != .search {
+                presentationState.inputMode = .search
+            }
+        }
+        .onChange(of: searchText) { _, _ in
+            stabilizeSelection()
+        }
+        .onChange(of: visibleIDs) { _, _ in
+            stabilizeSelection()
         }
     }
 
+    private var header: some View {
+        HStack {
+            Spacer()
+            PopupTabPicker(activeTab: Binding(
+                get: { presentationState.activeTab },
+                set: { newTab in
+                    presentationState.selectTab(newTab)
+                    stabilizeSelection()
+                }
+            ), fontSize: popupTabFontSize)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+    }
+
     private var searchBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField("Search clips...", text: $searchText)
+
+            TextField(activeTab.searchPlaceholder, text: $searchText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: popupTextSize))
                 .focused($isSearchFocused)
-                .onKeyPress(.downArrow) {
-                    navigate(direction: 1)
-                    return .handled
+                .accessibilityLabel(activeTab == .board ? "Filter board items" : "Filter starred items")
+                .onTapGesture {
+                    presentationState.inputMode = .search
                 }
-                .onKeyPress(.upArrow) {
-                    navigate(direction: -1)
-                    return .handled
-                }
-                .onKeyPress(.escape) {
-                    if !searchText.isEmpty {
-                        searchText = ""
-                        return .handled
-                    }
-                    onDismiss()
-                    return .handled
-                }
-                .onKeyPress(.return) {
-                    guard selectedIndex < filteredItems.count else { return .ignored }
-                    onSelect(filteredItems[selectedIndex])
-                    return .handled
-                }
-                .accessibilityLabel("Filter clipboard history")
+
             if !searchText.isEmpty {
                 Button(action: { searchText = "" }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -92,136 +163,442 @@ struct ClipboardPopupView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.28))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: searchText.isEmpty ? "clipboard" : "magnifyingglass")
-                .font(.system(size: 28))
+        VStack(spacing: 10) {
+            Image(systemName: activeTab == .board ? "rectangle.stack" : "star")
+                .font(.system(size: 28, weight: .medium))
                 .foregroundStyle(.secondary)
-            Text(searchText.isEmpty ? "No clipboard history" : "No matches")
-                .font(.headline)
+
+            Text(emptyTitle)
+                .font(.system(size: popupTitleSize, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text(emptySubtitle)
+                .font(.system(size: popupChipLabelSize))
                 .foregroundStyle(.secondary)
-            Text(searchText.isEmpty ? "Copy something to get started" : "Try a different search")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 230)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .focusable()
-        .focusEffectDisabled()
-        .focused($isListFocused)
-        .onKeyPress(.escape) { onDismiss(); return .handled }
-        .accessibilityLabel(searchText.isEmpty ? "No clipboard history" : "No search results")
+        .accessibilityLabel(emptyTitle)
     }
 
     private var itemList: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+                LazyVStack(spacing: 4) {
+                    ForEach(filteredItems) { item in
                         ClipboardItemRow(
                             item: item,
-                            isSelected: index == selectedIndex
+                            isSelected: item.id == selectedItem?.id,
+                            isDeleting: deletingItemIDs.contains(item.id),
+                            textSize: popupTextSize,
+                            onSelect: { onSelect(item) },
+                            onToggleStar: { performStarToggle(item) },
+                            onDelete: { performDelete(item) }
                         )
-                        .id(index)
-                        .onTapGesture {
-                            onSelect(item)
-                        }
+                        .id(item.id)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .move(edge: .trailing))
+                            )
+                        )
                     }
                 }
-                .padding(8)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
             }
-            .focusable()
-            .focusEffectDisabled()
-            .focused($isListFocused)
-            .onChange(of: searchText) {
-                selectedIndex = 0
-                scrollAnchor = .top
-            }
-            .onChange(of: selectedIndex) { _, new in
-                withAnimation(.easeOut(duration: 0.2)) {
-                    if scrollAnchor == .bottom {
-                        // Going down: keep lookahead item pinned at bottom edge
-                        proxy.scrollTo(min(filteredItems.count - 1, new + 1), anchor: .bottom)
-                    } else {
-                        // Going up: minimum scroll to keep previous item visible — no position jump
-                        proxy.scrollTo(max(0, new - 1))
-                    }
+            .onChange(of: selectedItem?.id) { _, newValue in
+                guard let request = pendingScrollRequest,
+                      filteredItems.indices.contains(request.targetIndex) else { return }
+
+                let targetID = filteredItems[request.targetIndex].id
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo(targetID, anchor: request.anchor)
                 }
-            }
-            .onKeyPress(.upArrow) {
-                navigate(direction: -1)
-                return .handled
-            }
-            .onKeyPress(.downArrow) {
-                navigate(direction: 1)
-                return .handled
-            }
-            .onKeyPress(.return) {
-                guard selectedIndex < filteredItems.count else { return .ignored }
-                onSelect(filteredItems[selectedIndex])
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                onDismiss()
-                return .handled
-            }
-            .onKeyPress(.delete) {
-                // Don't intercept delete when search field is active — let it backspace in search
-                guard !isSearchFocused else { return .ignored }
-                guard selectedIndex < filteredItems.count else { return .ignored }
-                let item = filteredItems[selectedIndex]
-                onDelete(item)
-                if selectedIndex >= filteredItems.count - 1 {
-                    selectedIndex = max(0, filteredItems.count - 2)
-                }
-                return .handled
-            }
-            .onKeyPress(characters: .init(charactersIn: "p")) { press in
-                guard press.modifiers.contains(.command) else { return .ignored }
-                guard selectedIndex < filteredItems.count else { return .ignored }
-                onTogglePin(filteredItems[selectedIndex])
-                return .handled
-            }
-            .onKeyPress(characters: .init(charactersIn: "c")) { press in
-                guard press.modifiers.contains(.command) else { return .ignored }
-                guard selectedIndex < filteredItems.count else { return .ignored }
-                onCopy(filteredItems[selectedIndex])
-                return .handled
-            }
-            .onKeyPress(characters: .init(charactersIn: "f")) { press in
-                guard press.modifiers.contains(.command) else { return .ignored }
-                isListFocused = false
-                isSearchFocused = true
-                return .handled
-            }
-            .onKeyPress(characters: .init(charactersIn: "123456789")) { press in
-                // Don't intercept digits while search is active — let them type into search
-                guard !isSearchFocused else { return .ignored }
-                guard let digit = Int(String(press.characters)), digit >= 1, digit <= 9 else {
-                    return .ignored
-                }
-                let index = digit - 1
-                guard index < filteredItems.count else { return .ignored }
-                onSelect(filteredItems[index])
-                return .handled
+                pendingScrollRequest = nil
             }
         }
     }
 
-    private func navigate(direction: Int) {
-        let newIndex = selectedIndex + direction
-        guard newIndex >= 0, newIndex < filteredItems.count else { return }
-        scrollAnchor = direction > 0 ? .bottom : .top
-        selectedIndex = newIndex
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Divider().opacity(0.14)
+
+            HStack(spacing: 8) {
+                ShortcutRecapChip(
+                    key: HotkeyFormatter.format(settingsStore.starItemShortcut),
+                    label: activeTab == .star ? "Unstar" : "Star",
+                    keyFontSize: popupCaptionSize,
+                    labelFontSize: popupChipLabelSize
+                )
+                ShortcutRecapChip(
+                    key: HotkeyFormatter.format(settingsStore.deleteItemShortcut),
+                    label: "Delete",
+                    keyFontSize: popupCaptionSize,
+                    labelFontSize: popupChipLabelSize
+                )
+                ShortcutRecapChip(
+                    key: HotkeyFormatter.format(settingsStore.focusSearchShortcut),
+                    label: "Search",
+                    keyFontSize: popupCaptionSize,
+                    labelFontSize: popupChipLabelSize
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private var emptyTitle: String {
+        switch activeTab {
+        case .board:
+            searchText.isEmpty ? "Board is empty" : "No matches"
+        case .star:
+            searchText.isEmpty ? "No starred items yet" : "No starred matches"
+        }
+    }
+
+    private var emptySubtitle: String {
+        switch activeTab {
+        case .board:
+            searchText.isEmpty
+                ? "Copy something and it will appear here instantly."
+                : "Try a different search or clear the current filter."
+        case .star:
+            searchText.isEmpty
+                ? "Star an item in Board to keep it close at hand."
+                : "Try a different search or switch back to Board."
+        }
+    }
+
+    private func handleActivationReset() {
+        searchText = ""
+        selectedItemID = filteredItems.first?.id
+        pendingScrollRequest = nil
+        presentationState.inputMode = .search
+        deletingItemIDs.removeAll()
+        focusSearchField()
+    }
+
+    private func stabilizeSelection() {
+        if filteredItems.isEmpty {
+            selectedItemID = nil
+            return
+        }
+
+        if let selectedItemID,
+           filteredItems.contains(where: { $0.id == selectedItemID }) {
+            return
+        }
+
+        selectedItemID = filteredItems.first?.id
+    }
+
+    private func performStarToggle(_ item: ClipboardHistoryItem) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            onToggleStar(item)
+        }
+    }
+
+    private func performDelete(_ item: ClipboardHistoryItem) {
+        let nextSelection = replacementSelection(afterDeleting: item)
+        deletingItemIDs.insert(item.id)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedItemID = nextSelection
+                onDelete(item)
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            deletingItemIDs.remove(item.id)
+        }
+    }
+
+    private func replacementSelection(afterDeleting item: ClipboardHistoryItem) -> UUID? {
+        guard let currentIndex = filteredItems.firstIndex(where: { $0.id == item.id }) else {
+            return filteredItems.first?.id
+        }
+
+        if currentIndex + 1 < filteredItems.count {
+            return filteredItems[currentIndex + 1].id
+        }
+
+        if currentIndex > 0 {
+            return filteredItems[currentIndex - 1].id
+        }
+
+        return nil
+    }
+
+    private func handlePopupKeyEvent(_ event: NSEvent) -> Bool {
+        guard let command = command(for: event) else { return false }
+
+        let outcome = PopupKeyboardRouter.route(command, state: popupKeyboardState)
+        guard outcome.handled else { return false }
+
+        apply(outcome)
+        return true
+    }
+
+    private func command(for event: NSEvent) -> PopupKeyboardCommand? {
+        switch event.keyCode {
+        case 0x24, 0x4C:
+            return .confirmSelection
+        case 0x33:
+            return .deleteKey
+        case 0x35:
+            return .escape
+        case 0x7D:
+            return .moveDown
+        case 0x7E:
+            return .moveUp
+        default:
+            break
+        }
+
+        if matches(event, shortcut: settingsStore.focusSearchShortcut) {
+            return .focusSearch
+        }
+
+        if matches(event, shortcut: settingsStore.starItemShortcut) {
+            return .toggleStar
+        }
+
+        if matches(event, shortcut: settingsStore.deleteItemShortcut) {
+            return .deleteSelected
+        }
+
+        if matches(event, shortcut: settingsStore.switchToStarShortcut) {
+            return .switchToStar
+        }
+
+        if matches(event, shortcut: settingsStore.copySelectedShortcut) {
+            return .copySelected
+        }
+
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.isEmpty,
+           let characters = event.charactersIgnoringModifiers,
+           let digit = Int(characters),
+           (1...9).contains(digit) {
+            return .digit(digit)
+        }
+
+        return nil
+    }
+
+    private func apply(_ outcome: PopupKeyboardOutcome) {
+        let previousIndex = selectedIndex
+
+        if outcome.state.activeTab != presentationState.activeTab {
+            presentationState.selectTab(outcome.state.activeTab)
+        } else {
+            presentationState.inputMode = outcome.state.inputMode
+        }
+
+        if let selectionIndex = outcome.state.selectedIndex,
+           filteredItems.indices.contains(selectionIndex) {
+            selectedItemID = filteredItems[selectionIndex].id
+        } else if outcome.state.selectedIndex == nil {
+            selectedItemID = nil
+        }
+
+        pendingScrollRequest = outcome.navigationSource.flatMap { source in
+            PopupScrollPlanner.plan(
+                previousIndex: previousIndex,
+                nextIndex: outcome.state.selectedIndex,
+                visibleItemCount: filteredItems.count,
+                source: source
+            )
+        }
+
+        switch outcome.effect {
+        case .clearSearch:
+            searchText = ""
+        case .dismiss:
+            onDismiss()
+        case .pasteSelection:
+            guard let item = item(at: outcome.state.selectedIndex) else { return }
+            onSelect(item)
+        case .toggleStar:
+            guard let item = item(at: outcome.state.selectedIndex) else { return }
+            performStarToggle(item)
+        case .deleteSelection:
+            guard let item = item(at: outcome.state.selectedIndex) else { return }
+            performDelete(item)
+        case .copySelection:
+            guard let item = item(at: outcome.state.selectedIndex) else { return }
+            onCopy(item)
+        case nil:
+            break
+        }
+    }
+
+    private func item(at index: Int?) -> ClipboardHistoryItem? {
+        if let index, filteredItems.indices.contains(index) {
+            return filteredItems[index]
+        }
+
+        return selectedItem
+    }
+
+    private func focusSearchField() {
+        DispatchQueue.main.async {
+            isSearchFocused = true
+        }
+    }
+
+    private func matches(_ event: NSEvent, shortcut: ShortcutConfiguration) -> Bool {
+        guard UInt32(event.keyCode) == shortcut.keyCode else { return false }
+
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return HotkeyFormatter.cocoaToCarbonModifiers(modifiers.rawValue) == shortcut.modifiers
+    }
+}
+
+private struct PopupKeyMonitor: NSViewRepresentable {
+    let onKeyDown: (NSEvent) -> Bool
+
+    func makeNSView(context: Context) -> PopupKeyMonitorView {
+        let view = PopupKeyMonitorView()
+        view.onKeyDown = onKeyDown
+        return view
+    }
+
+    func updateNSView(_ nsView: PopupKeyMonitorView, context: Context) {
+        nsView.onKeyDown = onKeyDown
+    }
+}
+
+private final class PopupKeyMonitorView: NSView {
+    var onKeyDown: ((NSEvent) -> Bool)?
+    private var monitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        startMonitoring()
+    }
+
+    override func removeFromSuperview() {
+        stopMonitoring()
+        super.removeFromSuperview()
+    }
+
+    private func startMonitoring() {
+        guard monitor == nil else { return }
+
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard event.window === self.window else { return event }
+            return self.onKeyDown?(event) == true ? nil : event
+        }
+    }
+
+    private func stopMonitoring() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+    }
+}
+
+private struct PopupTabPicker: View {
+    @Binding var activeTab: PopupTab
+    let fontSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(PopupTab.allCases) { tab in
+                Button(action: { activeTab = tab }) {
+                    Text(tab.title)
+                        .font(.system(size: fontSize, weight: .semibold))
+                        .foregroundStyle(activeTab == tab ? .white : .secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                }
+                .buttonStyle(.plain)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(activeTab == tab ? fruitClipBlue.opacity(0.94) : Color.clear)
+                        .shadow(
+                            color: activeTab == tab ? fruitClipBlue.opacity(0.25) : .clear,
+                            radius: 6
+                        )
+                )
+            }
+        }
+        .padding(4)
+        .frame(width: 176)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.24))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.04), lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct ShortcutRecapChip: View {
+    let key: String
+    let label: String
+    let keyFontSize: CGFloat
+    let labelFontSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(key)
+                .font(.system(size: keyFontSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color.white.opacity(0.08))
+                )
+
+            Text(label)
+                .font(.system(size: labelFontSize, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.03))
+        )
     }
 }
 
 struct ClipboardItemRow: View {
     let item: ClipboardHistoryItem
     let isSelected: Bool
+    let isDeleting: Bool
+    let textSize: CGFloat
+    let onSelect: () -> Void
+    let onToggleStar: () -> Void
+    let onDelete: () -> Void
 
     @State private var cachedThumbnail: NSImage? = nil
+    @State private var isHovering = false
 
     private var storageDir: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
@@ -230,42 +607,47 @@ struct ClipboardItemRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if item.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isSelected ? .white : fruitClipBlue)
-            }
+            starButton
 
             if item.kind == .image {
                 thumbnailView
-                    .frame(width: 32, height: 32)
+                    .frame(width: popupThumbnailSize, height: popupThumbnailSize)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.preview)
-                    .font(.system(size: 13))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .foregroundStyle(isSelected ? .white : .primary)
-
-                Text(elapsedString(from: item.timestamp))
-                    .font(.system(size: 10))
-                    .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
-            }
-
-            Spacer()
+            Text(item.preview)
+                .font(.system(size: textSize, weight: .semibold))
+                .lineLimit(2, reservesSpace: true)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+                .foregroundStyle(isSelected ? .white : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(minHeight: 48)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? fruitClipBlue : Color.clear)
-                .shadow(color: isSelected ? fruitClipBlue.opacity(0.4) : .clear, radius: 4)
+        .padding(.leading, 10)
+        .padding(.trailing, popupRowTrailingInset)
+        .padding(.vertical, 10)
+        .frame(height: popupRowHeight)
+        .background(rowBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: popupRowCornerRadius)
+                .stroke(Color.white.opacity(isSelected ? 0.09 : 0.04), lineWidth: 1)
         )
-        .contentShape(Rectangle())
-        .accessibilityLabel("\(item.kind == .text ? "Text" : "Image") item: \(item.preview), \(elapsedString(from: item.timestamp))\(item.isPinned ? ", pinned" : "")")
-        .accessibilityHint("Press Return to paste, Delete to remove, Command P to pin")
+        .overlay(alignment: .topTrailing) {
+            elapsedBadge
+                .padding(.top, 8)
+                .padding(.trailing, 8)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            deleteButton
+                .padding(.trailing, 8)
+                .padding(.bottom, 8)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: popupRowCornerRadius))
+        .contentShape(RoundedRectangle(cornerRadius: popupRowCornerRadius))
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(
+            "\(item.kind == .text ? "Text" : "Image") item: \(item.preview), \(elapsedString(from: item.timestamp))\(item.isStarred ? ", starred" : "")"
+        )
+        .accessibilityHint("Press Return to paste, S to star, D to delete")
         .task(id: item.payloadFilename) {
             guard item.kind == .image else { return }
             cachedThumbnail = await ThumbnailCache.shared.loadThumbnailAsync(
@@ -273,6 +655,105 @@ struct ClipboardItemRow: View {
                 storageDir: storageDir
             )
         }
+        .onTapGesture(perform: onSelect)
+    }
+
+    private var starButton: some View {
+        Button(action: onToggleStar) {
+            Image(systemName: item.isStarred ? "star.fill" : "star")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(item.isStarred ? fruitClipGold : starInactiveColor)
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var elapsedBadge: some View {
+        Text(elapsedString(from: item.timestamp))
+            .font(.system(size: max(textSize - 2, 9), weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(elapsedBadgeForegroundColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(elapsedBadgeBackground)
+            )
+    }
+
+    private var deleteButton: some View {
+        Button(action: onDelete) {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(deleteButtonColor)
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.plain)
+        .opacity((isHovering || isSelected || isDeleting) ? 1 : 0.42)
+    }
+
+    private var starInactiveColor: Color {
+        isSelected ? .white.opacity(0.55) : .secondary.opacity(0.85)
+    }
+
+    private var elapsedBadgeForegroundColor: Color {
+        if isDeleting {
+            return .white.opacity(0.96)
+        }
+
+        if isSelected {
+            return .white.opacity(0.9)
+        }
+
+        return .secondary.opacity(isHovering ? 0.96 : 0.9)
+    }
+
+    private var elapsedBadgeBackground: Color {
+        if isDeleting {
+            return .white.opacity(0.2)
+        }
+
+        if isSelected {
+            return .white.opacity(0.16)
+        }
+
+        return Color.white.opacity(isHovering ? 0.12 : 0.08)
+    }
+
+    private var deleteButtonColor: Color {
+        if isDeleting { return .white }
+        if isSelected { return .white.opacity(0.88) }
+        return fruitClipDelete.opacity(isHovering ? 0.96 : 0.75)
+    }
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: popupRowCornerRadius)
+            .fill(backgroundFill)
+            .shadow(color: shadowColor, radius: isSelected ? 10 : 0)
+    }
+
+    private var backgroundFill: Color {
+        if isDeleting {
+            return fruitClipDelete.opacity(0.85)
+        }
+
+        if isSelected {
+            return fruitClipBlue.opacity(0.95)
+        }
+
+        return Color.white.opacity(isHovering ? 0.07 : 0.03)
+    }
+
+    private var shadowColor: Color {
+        if isDeleting {
+            return fruitClipDelete.opacity(0.28)
+        }
+
+        if isSelected {
+            return fruitClipBlue.opacity(0.35)
+        }
+
+        return .clear
     }
 
     @ViewBuilder
@@ -281,12 +762,16 @@ struct ClipboardItemRow: View {
             Image(nsImage: thumbnail)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: popupThumbnailSize, height: popupThumbnailSize)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
         } else {
-            Image(systemName: "photo")
-                .font(.system(size: 16))
-                .foregroundStyle(isSelected ? .white : .secondary)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.08))
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
+                }
         }
     }
 }
@@ -309,11 +794,11 @@ struct AnimatedGradientBorder: View {
     var body: some View {
         let gradient = AngularGradient(
             stops: [
-                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9),  location: 0.0),
-                .init(color: Color(red: 0.4, green: 0.7,  blue: 1.0),  location: 0.25),
+                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9), location: 0.0),
+                .init(color: Color(red: 0.4, green: 0.7, blue: 1.0), location: 0.25),
                 .init(color: Color(red: 0.15, green: 0.45, blue: 0.95), location: 0.5),
-                .init(color: Color(red: 0.3, green: 0.6,  blue: 1.0),  location: 0.75),
-                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9),  location: 1.0),
+                .init(color: Color(red: 0.3, green: 0.6, blue: 1.0), location: 0.75),
+                .init(color: Color(red: 0.1, green: 0.35, blue: 0.9), location: 1.0),
             ],
             center: .center,
             angle: .degrees(rotationAngle)

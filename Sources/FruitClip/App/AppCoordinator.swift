@@ -36,52 +36,58 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
             self?.historyStore.deleteItem(item)
         }
 
-        popupController.onItemPinToggled = { [weak self] item in
-            self?.historyStore.togglePin(item)
+        popupController.onItemStarToggled = { [weak self] item in
+            self?.historyStore.toggleStar(item)
         }
 
-        hotkeyManager = GlobalHotkeyManager(settingsStore: settingsStore) { [weak self] in
-            self?.togglePopup()
+        hotkeyManager = GlobalHotkeyManager(settingsStore: settingsStore) { [weak self] action in
+            switch action {
+            case .openBoard:
+                self?.togglePopup(initialTab: .board)
+            case .openStar:
+                self?.togglePopup(initialTab: .star)
+            }
         }
         hotkeyManager.onRegistrationFailed = { [weak self] message in
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Hotkey Conflict"
+            alert.messageText = "Shortcut Conflict"
             alert.informativeText = message
             alert.runModal()
-            self?.showPreferences()
+            self?.showSettings()
         }
         hotkeyManager.register()
 
         statusItemController = StatusItemController(
-            onOpenClipboard: { [weak self] in self?.togglePopup() },
-            onPreferences: { [weak self] in self?.showPreferences() },
+            onOpenClipboard: { [weak self] in self?.togglePopup(initialTab: .board) },
+            onPreferences: { [weak self] in self?.showSettings() },
             onTogglePause: { [weak self] in self?.togglePause() },
-            onClearHistory: { [weak self] in self?.clearHistory() },
+            onClearHistory: { [weak self] in self?.clearBoard() },
             onQuit: { NSApp.terminate(nil) },
             settingsStore: settingsStore
         )
 
         if settingsStore.isFirstLaunch {
             settingsStore.isFirstLaunch = false
-            showPreferences()
+            showSettings()
         }
     }
 
-    private func togglePopup() {
-        if popupController.isVisible {
-            popupController.dismiss()
-        } else {
-            popupController.show(items: historyStore.items, settingsStore: settingsStore)
-        }
+    private func togglePopup(initialTab: PopupTab) {
+        popupController.toggle(
+            initialTab: initialTab,
+            historyStore: historyStore,
+            settingsStore: settingsStore
+        )
     }
 
-    private func showPreferences() {
+    private func showSettings() {
         if preferencesWindow == nil {
             preferencesWindow = PreferencesWindowController(
                 settingsStore: settingsStore,
                 hotkeyManager: hotkeyManager,
-                onClearHistory: { [weak self] in self?.clearHistory() }
+                historyStore: historyStore,
+                onClearHistory: { [weak self] in self?.clearBoard() }
             )
         }
         preferencesWindow?.showWindow()
@@ -92,16 +98,17 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         statusItemController.updateMenu()
     }
 
-    private func clearHistory() {
+    private func clearBoard() {
         let alert = NSAlert()
-        alert.messageText = "Clear Clipboard History"
-        alert.informativeText = "This will permanently delete all saved clipboard items."
+        alert.messageText = "Clear Board"
+        alert.informativeText =
+            "This will permanently delete non-starred clipboard items. Starred clips will be kept."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")
 
         if alert.runModal() == .alertFirstButtonReturn {
-            historyStore.clearAll()
+            historyStore.clearBoard()
         }
     }
 

@@ -47,6 +47,7 @@ final class ClipboardHistoryStore: ObservableObject {
 
         loadMetadata()
         cleanOrphanedFiles()
+        refreshStoragePolicies()
         startPolling()
     }
 
@@ -73,29 +74,36 @@ final class ClipboardHistoryStore: ObservableObject {
     }
 
     func deleteItem(_ item: ClipboardHistoryItem) {
-        let fileURL = storageDir.appendingPathComponent(item.payloadFilename)
-        try? FileManager.default.removeItem(at: fileURL)
+        deletePayloadFiles(for: items.filter { $0.id == item.id })
         items.removeAll { $0.id == item.id }
         saveMetadata()
     }
 
-    func togglePin(_ item: ClipboardHistoryItem) {
+    func toggleStar(_ item: ClipboardHistoryItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        items[index].isPinned.toggle()
-        // Move pinned items to top, unpinned below
-        let pinned = items.filter { $0.isPinned }
-        let unpinned = items.filter { !$0.isPinned }
-        items = pinned + unpinned
+        items[index].isStarred.toggle()
         saveMetadata()
     }
 
     func clearAll() {
-        for item in items {
-            let fileURL = storageDir.appendingPathComponent(item.payloadFilename)
-            try? FileManager.default.removeItem(at: fileURL)
-        }
+        deletePayloadFiles(for: items)
         items = []
         saveMetadata()
+    }
+
+    func clearBoard() {
+        let boardOnly = items.filter { !$0.isStarred }
+        deletePayloadFiles(for: boardOnly)
+        items.removeAll { !$0.isStarred }
+        saveMetadata()
+    }
+
+    func refreshStoragePolicies() {
+        let removedByRetention = applyRetentionPolicies()
+        let removedByCount = pruneIfNeeded()
+        if removedByRetention || removedByCount {
+            saveMetadata()
+        }
     }
 
     func payloadURL(for item: ClipboardHistoryItem) -> URL {
@@ -109,6 +117,8 @@ final class ClipboardHistoryStore: ObservableObject {
     private func checkPasteboard() {
         guard !settingsStore.isPaused else { return }
         guard !isWritingToPasteboard else { return }
+
+        refreshStoragePolicies()
 
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
@@ -161,19 +171,21 @@ final class ClipboardHistoryStore: ObservableObject {
         )
 
         items.insert(item, at: 0)
-        pruneIfNeeded()
-        saveMetadata()
+        refreshStoragePolicies()
     }
 
-    private func pruneIfNeeded() {
+    @discardableResult
+    private func pruneIfNeeded() -> Bool {
         let max = settingsStore.maxHistoryCount
-        while items.count > max {
-            // Find the last unpinned item to remove; skip pinned items
-            guard let index = items.lastIndex(where: { !$0.isPinned }) else { break }
-            let removed = items.remove(at: index)
-            let fileURL = storageDir.appendingPathComponent(removed.payloadFilename)
-            try? FileManager.default.removeItem(at: fileURL)
+        var removedItems: [ClipboardHistoryItem] = []
+
+        while items.filter({ !$0.isStarred }).count > max {
+            guard let index = items.lastIndex(where: { !$0.isStarred }) else { break }
+            removedItems.append(items.remove(at: index))
         }
+
+        deletePayloadFiles(for: removedItems)
+        return !removedItems.isEmpty
     }
 
     nonisolated static func makeTextPreview(_ text: String) -> String {
@@ -226,6 +238,39 @@ final class ClipboardHistoryStore: ObservableObject {
                 try? FileManager.default.removeItem(at: fileURL)
                 logger.info("Cleaned orphaned file: \(fileURL.lastPathComponent)")
             }
+        }
+    }
+
+    @discardableResult
+    private func applyRetentionPolicies(now: Date = Date()) -> Bool {
+        var removedItems: [ClipboardHistoryItem] = []
+        let retainedItems = items.filter { item in
+            let policy = item.isStarred
+                ? settingsStore.starRetentionPolicy
+                : settingsStore.boardRetentionPolicy
+
+            guard let interval = policy.timeInterval else {
+                return true
+            }
+
+            let shouldKeep = now.timeIntervalSince(item.timestamp) < interval
+            if !shouldKeep {
+                removedItems.append(item)
+            }
+            return shouldKeep
+        }
+
+        guard retainedItems.count != items.count else { return false }
+
+        items = retainedItems
+        deletePayloadFiles(for: removedItems)
+        return true
+    }
+
+    private func deletePayloadFiles(for items: [ClipboardHistoryItem]) {
+        for item in items {
+            let fileURL = storageDir.appendingPathComponent(item.payloadFilename)
+            try? FileManager.default.removeItem(at: fileURL)
         }
     }
 

@@ -12,7 +12,7 @@ struct ClipboardHistoryStoreMetadataTests {
                 kind: .text, contentHash: "aaa", preview: "Hello", payloadFilename: "1.dat"),
             ClipboardHistoryItem(
                 kind: .image, contentHash: "bbb", preview: "Image 50x50",
-                payloadFilename: "2.dat"),
+                payloadFilename: "2.dat", isStarred: true),
         ]
 
         let encoded = try JSONEncoder().encode(items)
@@ -21,6 +21,7 @@ struct ClipboardHistoryStoreMetadataTests {
         #expect(decoded.count == 2)
         #expect(decoded[0].kind == .text)
         #expect(decoded[1].kind == .image)
+        #expect(decoded[1].isStarred == true)
     }
 
     @Test("Text preview truncation logic")
