@@ -17,13 +17,20 @@ FruitClip is a native macOS clipboard manager that lives in your menu bar so you
 
 ## What You Can Do
 
-- **Open Board from anywhere** with the default `⌘⇧V` shortcut, or open it from the menu bar.
-- **Keep favorites in Star** so important clips stay easy to find even after you clear the Board.
-- **Search and navigate quickly** with a keyboard-first popup for recent text clips.
-- **Restore text and images** back to the clipboard, then paste them into the app you were just using.
-- **Auto-paste when allowed**: with Accessibility permission, FruitClip pastes for you; without it, the selected item is still copied so you can press `⌘V` yourself.
-- **Customize the workflow** with configurable shortcuts, launch at login, popup font size, mouse-dismiss behavior, and separate retention rules for Board and Star.
-- **Manage history safely** by pausing monitoring, clearing only Board items, and keeping everything stored locally on your Mac.
+- **Menu bar clipboard manager** with a clean, native feel
+- **Board + Stars** — browse your full clipboard history on the Board tab, or keep important clips on Stars
+- **Global shortcuts** to open the Board or Stars from anywhere (default: `⌘⇧V`)
+- **Text and image support** — images display full-width previews in the popup
+- **Search** text clips instantly inside the popup
+- **Full keyboard flow** — arrows to navigate, `Enter` to paste, `S` to star, `D` to delete, `F` to switch to Stars, `⌘C` to copy without pasting, `⌘F` to focus search
+- **Auto-paste into the previous app** when Accessibility access is granted
+- **Retention policies** — set how long Board and Stars history is kept (1 day to never)
+- **Up to 100 items** in history, default 50, configurable in preferences
+- **Customizable shortcuts** — rebind every action in the Shortcuts tab
+- **Font size control** — adjust the popup text size from 11 to 15 pt
+- **Dismiss on mouse move** — optionally close the popup when the cursor leaves
+- **Pause monitoring, clear history, and launch at login** from the menu bar or preferences
+- **Local-only storage** — your clipboard history never leaves your Mac
 
 ## Install
 
