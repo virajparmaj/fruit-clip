@@ -3,45 +3,40 @@
     <img src="fruit-clip.png" width="120" alt="FruitClip logo" />
 </div>
 
-FruitClip is a lightweight native macOS clipboard manager that lives in your menu bar — press a shortcut to search, navigate, and paste anything you've copied.
+FruitClip is a native macOS clipboard manager that lives in your menu bar so you can reopen recent clips, search fast, and paste back into the app you were using.
 
 ## App Preview
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/images/preview-menu-bar.png" width="280" alt="Menu bar controls"><br><sub>Menu bar controls</sub></td>
-    <td width="33%"><img src="docs/images/preview-popup.png" width="280" alt="Clipboard popup"><br><sub>Clipboard popup</sub></td>
-    <td width="33%"><img src="docs/images/preview-preferences.png" width="280" alt="Preferences"><br><sub>Preferences</sub></td>
+    <td width="33%"><img src="docs/images/preview-menu-bar.png" width="280" alt="Menu bar menu"><br><sub>Menu bar menu</sub></td>
+    <td width="33%"><img src="docs/images/preview-popup.png" width="280" alt="Board popup"><br><sub>Board popup</sub></td>
+    <td width="33%"><img src="docs/images/preview-preferences.png" width="280" alt="Settings window"><br><sub>Settings window</sub></td>
   </tr>
 </table>
 
-## What You Get
+## What You Can Do
 
-- **Menu bar clipboard manager** with a clean, native feel
-- **Board + Stars** — browse your full clipboard history on the Board tab, or keep important clips on Stars
-- **Global shortcuts** to open the Board or Stars from anywhere (default: `⌘⇧V`)
-- **Text and image support** — images display full-width previews in the popup
-- **Search** text clips instantly inside the popup
-- **Full keyboard flow** — arrows to navigate, `Enter` to paste, `S` to star, `D` to delete, `F` to switch to Stars, `⌘C` to copy without pasting, `⌘F` to focus search
-- **Auto-paste into the previous app** when Accessibility access is granted
-- **Retention policies** — set how long Board and Stars history is kept (1 day to never)
-- **Up to 100 items** in history, default 50, configurable in preferences
-- **Customizable shortcuts** — rebind every action in the Shortcuts tab
-- **Font size control** — adjust the popup text size from 11 to 15 pt
-- **Dismiss on mouse move** — optionally close the popup when the cursor leaves
-- **Pause monitoring, clear history, and launch at login** from the menu bar or preferences
-- **Local-only storage** — your clipboard history never leaves your Mac
+- **Open Board from anywhere** with the default `⌘⇧V` shortcut, or open it from the menu bar.
+- **Keep favorites in Star** so important clips stay easy to find even after you clear the Board.
+- **Search and navigate quickly** with a keyboard-first popup for recent text clips.
+- **Restore text and images** back to the clipboard, then paste them into the app you were just using.
+- **Auto-paste when allowed**: with Accessibility permission, FruitClip pastes for you; without it, the selected item is still copied so you can press `⌘V` yourself.
+- **Customize the workflow** with configurable shortcuts, launch at login, popup font size, mouse-dismiss behavior, and separate retention rules for Board and Star.
+- **Manage history safely** by pausing monitoring, clearing only Board items, and keeping everything stored locally on your Mac.
 
 ## Install
 
-Build the app bundle first, then run the installer:
+FruitClip currently installs from source on macOS 15+. You will need Xcode 16 or Apple Command Line Tools with Swift 6.
 
 ```bash
+git clone https://github.com/virajparmaj/fruit-clip
+cd fruit-clip
 ./build.sh
 ./install.sh
 ```
 
-The installer copies `FruitClip.app` to `/Applications`, clears the quarantine flag, and launches the app.
+The installer copies `FruitClip.app` to `/Applications`, clears the quarantine flag if needed, and launches the app.
 
 To uninstall:
 
@@ -50,25 +45,19 @@ To uninstall:
 ./uninstall.sh --wipe-data  # removes the app and all clipboard data
 ```
 
-## Quick Use
+## Getting Started
 
 1. Copy text or images as you normally would.
 2. Press `⌘⇧V` to open the Board.
-3. Type to filter, or move through the list with arrow keys.
-4. Press `Enter` to paste the selected item back into the app you were using.
-5. Press `S` to star an item, `D` to delete it, or `F` to switch to your Stars.
+3. Type to filter, or use the arrow keys to move through your recent clips.
+4. Press `Return` to paste, `S` to star, `D` to delete, `F` to jump to Star, `⌘C` to copy without pasting, or `⌘F` to focus search.
+5. Grant **System Settings → Privacy & Security → Accessibility → FruitClip** if you want automatic paste into other apps.
 
-## Permissions
-
-FruitClip needs **Accessibility** access for automatic paste into other apps.
-
-Grant it in **System Settings → Privacy & Security → Accessibility → FruitClip**.
-
-Without it, FruitClip still copies the selected item to your clipboard — paste it manually with `⌘V`.
+If Accessibility is not granted, FruitClip still restores the selected item to your clipboard so you can paste manually with `⌘V`.
 
 ## Developer Setup
 
-**Requirements:** macOS 15.0+, Swift 6.0+ (Xcode 16 or Command Line Tools)
+Requirements: macOS 15.0+, Swift 6.0+ (Xcode 16 or Apple Command Line Tools)
 
 ```bash
 git clone https://github.com/virajparmaj/fruit-clip
