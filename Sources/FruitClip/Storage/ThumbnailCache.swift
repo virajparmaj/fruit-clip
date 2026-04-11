@@ -30,8 +30,7 @@ final class ThumbnailCache {
 
                 guard let imageData, let image = NSImage(data: imageData) else { return }
 
-                let thumbSize = NSSize(width: 64, height: 64)
-                guard let thumb = ThumbnailCache.makeThumbnail(from: image, size: thumbSize) else { return }
+                guard let thumb = ThumbnailCache.makeThumbnail(from: image, maxDimension: 600) else { return }
                 self.cache.setObject(thumb, forKey: filename as NSString)
             }
         }
@@ -55,16 +54,33 @@ final class ThumbnailCache {
         guard let image = NSImage(data: data) else { return nil }
 
         // Resize on @MainActor (AppKit requirement)
-        let thumbSize = NSSize(width: 64, height: 64)
-        guard let thumb = ThumbnailCache.makeThumbnail(from: image, size: thumbSize) else { return nil }
+        guard let thumb = ThumbnailCache.makeThumbnail(from: image, maxDimension: 600) else { return nil }
         cache.setObject(thumb, forKey: filename as NSString)
         return thumb
     }
 
     // Offscreen render using NSBitmapImageRep — replaces the deprecated lockFocus/unlockFocus API.
-    private static func makeThumbnail(from image: NSImage, size: NSSize) -> NSImage? {
-        let width = Int(size.width)
-        let height = Int(size.height)
+    // Scales proportionally so the longer edge fits within maxDimension pixels.
+    private static func makeThumbnail(from image: NSImage, maxDimension: CGFloat) -> NSImage? {
+        let originalSize = image.size
+        guard originalSize.width > 0, originalSize.height > 0 else { return nil }
+
+        let scale: CGFloat
+        if originalSize.width >= originalSize.height {
+            scale = min(maxDimension / originalSize.width, 1.0)
+        } else {
+            scale = min(maxDimension / originalSize.height, 1.0)
+        }
+
+        let thumbSize = NSSize(
+            width: round(originalSize.width * scale),
+            height: round(originalSize.height * scale)
+        )
+
+        let width = Int(thumbSize.width)
+        let height = Int(thumbSize.height)
+        guard width > 0, height > 0 else { return nil }
+
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: width,
@@ -80,12 +96,12 @@ final class ThumbnailCache {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        image.draw(in: NSRect(origin: .zero, size: size),
-                   from: NSRect(origin: .zero, size: image.size),
+        image.draw(in: NSRect(origin: .zero, size: thumbSize),
+                   from: NSRect(origin: .zero, size: originalSize),
                    operation: .copy, fraction: 1.0)
         NSGraphicsContext.restoreGraphicsState()
 
-        let thumb = NSImage(size: size)
+        let thumb = NSImage(size: thumbSize)
         thumb.addRepresentation(rep)
         return thumb
     }

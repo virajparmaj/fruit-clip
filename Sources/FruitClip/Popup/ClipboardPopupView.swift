@@ -40,7 +40,7 @@ struct ClipboardPopupView: View {
     }
 
     private var selectedItem: ClipboardHistoryItem? {
-        guard let selectedItemID else { return filteredItems.first }
+        guard let selectedItemID else { return nil }
         return filteredItems.first(where: { $0.id == selectedItemID }) ?? filteredItems.first
     }
 
@@ -86,7 +86,7 @@ struct ClipboardPopupView: View {
                 .fill(.regularMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .fill(Color.black.opacity(0.26))
+                        .fill(Color.black.opacity(0.55))
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -288,7 +288,7 @@ struct ClipboardPopupView: View {
 
     private func handleActivationReset() {
         searchText = ""
-        selectedItemID = filteredItems.first?.id
+        selectedItemID = nil
         pendingScrollRequest = nil
         presentationState.inputMode = .search
         deletingItemIDs.removeAll()
@@ -301,12 +301,13 @@ struct ClipboardPopupView: View {
             return
         }
 
-        if let selectedItemID,
-           filteredItems.contains(where: { $0.id == selectedItemID }) {
+        guard let selectedItemID else { return }
+
+        if filteredItems.contains(where: { $0.id == selectedItemID }) {
             return
         }
 
-        selectedItemID = filteredItems.first?.id
+        self.selectedItemID = filteredItems.first?.id
     }
 
     private func performStarToggle(_ item: ClipboardHistoryItem) {
@@ -610,22 +611,30 @@ struct ClipboardItemRow: View {
             starButton
 
             if item.kind == .image {
-                thumbnailView
-                    .frame(width: popupThumbnailSize, height: popupThumbnailSize)
-            }
-
-            Text(item.preview)
-                .font(.system(size: textSize, weight: .semibold))
-                .lineLimit(2, reservesSpace: true)
-                .truncationMode(.tail)
-                .multilineTextAlignment(.leading)
-                .foregroundStyle(isSelected ? .white : .primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    thumbnailView
+                        .frame(maxWidth: .infinity, maxHeight: 160)
+                    Text(item.preview)
+                        .font(.system(size: textSize - 1, weight: .regular))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(item.preview)
+                    .font(.system(size: textSize, weight: .regular))
+                    .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(isSelected ? .white : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.leading, 10)
         .padding(.trailing, popupRowTrailingInset)
         .padding(.vertical, 10)
-        .frame(height: popupRowHeight)
+        .frame(minHeight: popupRowHeight)
         .background(rowBackground)
         .overlay(
             RoundedRectangle(cornerRadius: popupRowCornerRadius)
@@ -670,7 +679,7 @@ struct ClipboardItemRow: View {
 
     private var elapsedBadge: some View {
         Text(elapsedString(from: item.timestamp))
-            .font(.system(size: max(textSize - 2, 9), weight: .semibold, design: .rounded))
+            .font(.system(size: max(textSize - 2, 9), weight: .medium, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(elapsedBadgeForegroundColor)
             .padding(.horizontal, 7)
@@ -761,15 +770,14 @@ struct ClipboardItemRow: View {
         if let thumbnail = cachedThumbnail {
             Image(nsImage: thumbnail)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: popupThumbnailSize, height: popupThumbnailSize)
+                .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
         } else {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.white.opacity(0.08))
                 .overlay {
                     Image(systemName: "photo")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
                 }
         }
