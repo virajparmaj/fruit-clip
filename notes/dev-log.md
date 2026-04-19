@@ -1,6 +1,6 @@
 # FruitClip — Dev Log & Design Notes
 
-_Last updated: 2026-03-30_
+_Last updated: 2026-04-19_
 
 ---
 
@@ -57,6 +57,49 @@ FruitClip is a working native macOS menu bar clipboard manager. All core feature
 - **Search scoped to `.text` items** — image items excluded from filtered results (current working-tree state). `Confirmed from code`
 - **Directional scroll anchor** — going down pins lookahead item to bottom edge; going up uses minimum scroll (no `anchor:` argument) to avoid position jumping. `Confirmed from code`
 
+### Preferences height + status bar icon refinement (`8131e2a`, `efdfe4e`)
+- Preferences window height bumped 370→480 to accommodate growing settings UI
+- Status bar icon size increased 18→22px; added proper retina @2x representation
+- Icon assets regenerated to match new dimensions
+
+### Icon generation pipeline (`ba3d996`, `e405fd3`)
+- **`scripts/generate_icons.sh`** — one-time generator; produces all standard macOS sizes (16–1024px) from source PNG using `sips`, with normalize+pad at 0.82/0.72 ratios
+- **`assets/icons/macos/`** — pre-generated icon set checked into repo
+- **`build.sh` updated** — icon normalization pipeline replaces simple `sips` resize; handles transparent padding for macOS icon guidelines
+- Menubar icons reverted to `fruit-clip-status.png` / `@2x.png` names at 22×22px after experimenting with separate `menubar.png` assets
+
+### Install scripts + polish (`6eec257`)
+- **`VERSION` file** — single source of truth for version string; `build.sh` reads it first, falls back to `git describe`, then hardcoded `1.0`
+- **`install.sh` / `uninstall.sh`** — deployment scripts: copy app to `/Applications`, verify signature, display installed version; uninstall removes app + support data
+- **Hotkey conflict alert** — `GlobalHotkeyManager` surfaces a user-visible alert when registration fails, with a button to open Preferences
+- **`StorageEnvelope`** — schema versioning wrapper for `ClipboardHistoryItem`; enables forward-compatible migrations
+- Search filter corrected: non-text items no longer incorrectly excluded when query is empty
+- Mouse dismiss threshold raised 10→50pts to reduce accidental dismissals
+- Launch-at-login failure now rolls back the toggle and presents an alert rather than silently failing
+- `NSApp.activate(ignoringOtherApps:)` deprecation warnings resolved
+
+### Pre-publish repo hygiene (`36d9514`)
+- MIT license added (`LICENSE`)
+- `AGENTS.md` removed (was a duplicate of `CLAUDE.md`)
+- `.gitignore` expanded: covers `*.xcuserstate`, `*.icns`, editor swap files, and other build artifacts
+
+### Starred items + multi-shortcut system (`11b0654`)
+- **Pin → Star rename** — `isPinned` replaced by `isStarred` throughout; popup gains a dedicated **Starred** tab alongside All
+- **Multi-hotkey support** — `GlobalHotkeyManager` now handles multiple named actions (`openBoard`, `openStar`); each maps to an independent `ShortcutConfiguration`
+- **`ShortcutConfiguration`** (`SettingsModels.swift`) — `Codable` struct replacing the flat `keyCode`/`modifiers` pair; defaults defined as static constants
+- **`PopupKeyboardRouter`** extracted from `ClipboardPopupView` — owns all keyboard handling logic, eliminating the massive `onKeyPress` chain
+- **`PopupScrollPlanner`** extracted — encapsulates directional scroll anchor decisions
+- **`SettingsModels.swift`** added — `ShortcutConfiguration`, `RetentionPolicy` (1 day → never), `PopupFontSize` (11–15pt, default 12)
+- **Expanded Preferences UI** — per-action shortcut recorders, retention policy picker, font size slider
+- **New test suites** — `GlobalHotkeyManagerTests`, `PopupKeyboardRouterTests`, `PopupScrollPlannerTests`
+
+### Image preview polish + fixes (`110003b`)
+- Proportional thumbnails up to 600px wide (replaces fixed 64×64 crop)
+- Image rows expand to fit content; aspect ratio mode changed to `.fit`
+- Separate row layout for image vs text items in the popup list
+- Popup overlay background opacity deepened to 0.55 for better contrast
+- Nil-guard added on selection reset when popup activates
+
 ---
 
 ## Popup Keyboard Map
@@ -65,12 +108,15 @@ FruitClip is a working native macOS menu bar clipboard manager. All core feature
 |-----|--------|
 | ↑ / ↓ | Navigate |
 | Return | Paste selected |
-| Delete | Remove selected |
-| ⌘P | Toggle pin |
-| ⌘C | Copy without pasting |
-| ⌘F | Jump to search |
+| D (default) | Remove selected |
+| S (default) | Toggle star |
+| F (default) | Switch to Starred tab |
+| ⌘C (default) | Copy without pasting |
+| ⌘F (default) | Jump to search |
 | 1–9 | Direct paste by index |
 | Esc | Clear search / dismiss |
+
+_Shortcuts are configurable in Preferences. Defaults defined in `ShortcutConfiguration`._
 
 ---
 
@@ -96,8 +142,8 @@ CGEvent tap requires Accessibility permission. Carbon `RegisterEventHotKey` work
 ## Known Issues / TODOs
 
 - No notarization — can't distribute outside dev machines without it
-- Launch at login (`ServiceManagement`) wired but may need polish/testing
+- Launch at login (`ServiceManagement`) wired; error rollback added but real-world testing needed
 - No CI/CD pipeline
 - `ThumbnailCache` uses `lockFocus/unlockFocus` (both sync and async paths) which is deprecated in favor of `NSBitmapImageRep`-based drawing — works fine for now
-- `dismissOnMouseMove` implemented in `PopupPanelController` (`Confirmed from code` — line 73); behavior needs real-world testing
-- Hotkey recorder in Preferences doesn't validate conflicts with system hotkeys
+- `dismissOnMouseMove` implemented in `PopupPanelController`; behavior needs real-world testing
+- Per-action shortcut recorders in Preferences do not validate conflicts with system hotkeys or other registered actions
