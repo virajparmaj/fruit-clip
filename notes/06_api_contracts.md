@@ -18,8 +18,10 @@ These are the cross-component contracts enforced in code.
 
 // Mutations
 func deleteItem(_ item: ClipboardHistoryItem)
-func togglePin(_ item: ClipboardHistoryItem)
-func clearAll()
+func toggleStar(_ item: ClipboardHistoryItem)
+func clearAll()                                      // wipes everything (starred + board)
+func clearBoard()                                    // wipes only non-starred items
+func refreshStoragePolicies()                        // re-applies retention + count pruning
 
 // Payload access
 func loadPayload(for item: ClipboardHistoryItem) -> Data?
@@ -46,7 +48,14 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable, Sendable {
     let contentHash: String // SHA256 hex, 64 chars
     let preview: String     // text summary or "Image WxH"
     let payloadFilename: String  // UUID.dat
-    var isPinned: Bool
+    var isStarred: Bool          // backward-compat: decodes as false if missing
+}
+
+// Wrapper persisted to metadata.json
+struct StorageEnvelope: Codable {
+    static let currentVersion = 3
+    let schemaVersion: Int
+    let items: [ClipboardHistoryItem]
 }
 ```
 
@@ -55,10 +64,14 @@ struct ClipboardHistoryItem: Identifiable, Codable, Equatable, Sendable {
 **Confirmed from code** (`PopupPanelController.swift`):
 
 ```swift
-var onItemSelected: ((ClipboardHistoryItem) -> Void)?   // paste + dismiss
-var onItemCopied: ((ClipboardHistoryItem) -> Void)?     // copy only, dismiss
-var onItemDeleted: ((ClipboardHistoryItem) -> Void)?    // remove from history
-var onItemPinToggled: ((ClipboardHistoryItem) -> Void)? // toggle pin
+var onItemSelected: ((ClipboardHistoryItem) -> Void)?    // paste + dismiss
+var onItemCopied: ((ClipboardHistoryItem) -> Void)?      // copy only, dismiss
+var onItemDeleted: ((ClipboardHistoryItem) -> Void)?     // remove from history
+var onItemStarToggled: ((ClipboardHistoryItem) -> Void)? // toggle star
+
+// Show/toggle is parameterised by initial tab (.board or .star)
+func toggle(initialTab: PopupTab, historyStore:, settingsStore:)
+func show(historyStore:, settingsStore:, initialTab:)
 ```
 
 ### SettingsStore persisted keys
@@ -67,14 +80,27 @@ var onItemPinToggled: ((ClipboardHistoryItem) -> Void)? // toggle pin
 
 | Key | Type | Default |
 |-----|------|---------|
-| `hotkeyKeyCode` | UInt32 | `0x09` (V) |
-| `hotkeyModifiers` | UInt32 | `cmdKey \| shiftKey` |
+| `openBoardShortcut` | `ShortcutConfiguration` (JSON-encoded) | `⌘⇧V` (`keyCode 0x09`, `cmdKey \| shiftKey`) |
+| `openStarShortcut` | `ShortcutConfiguration?` (JSON-encoded, optional) | unset |
+| `openStarShortcutEnabled` | Bool | false |
+| `starItemShortcut` | `ShortcutConfiguration` | `S` (`keyCode 0x01`, no modifier) |
+| `deleteItemShortcut` | `ShortcutConfiguration` | `D` (`keyCode 0x02`, no modifier) |
+| `switchToStarShortcut` | `ShortcutConfiguration` | `F` (`keyCode 0x03`, no modifier) |
+| `copySelectedShortcut` | `ShortcutConfiguration` | `⌘C` (`keyCode 0x08`, `cmdKey`) |
+| `focusSearchShortcut` | `ShortcutConfiguration` | `⌘F` (`keyCode 0x03`, `cmdKey`) |
 | `launchAtLogin` | Bool | false |
 | `isPaused` | Bool | false |
 | `isFirstLaunch` | Bool | true |
 | `maxHistoryCount` | Int | 50 (clamped 1–100) |
+| `popupFontSize` | Int | 12 (clamped to `PopupFontSize.min..max` = 11..15) |
 | `dismissOnMouseMove` | Bool | false |
+| `boardRetentionPolicy` | `RetentionPolicy.rawValue` | `oneWeek` |
+| `starRetentionPolicy` | `RetentionPolicy.rawValue` | `oneMonth` |
+
+Legacy `hotkeyKeyCode` / `hotkeyModifiers` are still read once on first launch and migrated into `openBoardShortcut`.
+
+`SettingsStore.activeOpenStarShortcut` returns the open-star shortcut only when both the value is set and `openStarShortcutEnabled == true`.
 
 ### metadata.json schema
 
-**Confirmed from code** — JSON array of `ClipboardHistoryItem` (Codable). Written by `JSONEncoder`, read by `JSONDecoder`. No versioning field — forward/backward compat risk if model fields change.
+**Confirmed from code** — Persisted as `StorageEnvelope { schemaVersion, items }` (`ClipboardHistoryStore.saveMetadata()`). On load, the versioned envelope is tried first; if decoding fails, `loadMetadata()` falls back to the legacy unversioned `[ClipboardHistoryItem]` array and re-saves in the new format on the spot. Schema bumps require updating `StorageEnvelope.currentVersion`.
