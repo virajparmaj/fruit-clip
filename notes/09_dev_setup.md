@@ -40,7 +40,7 @@ open FruitClip.app
 4. Two-pass normalize+pad: bundle icons scaled to 82% of canvas (`TARGET_ALPHA_BOUNDS_RATIO=0.82`), dock/runtime icons to 72% (`DOCK_ICON_BOUNDS_RATIO=0.72`). Both passes use `sips` resize then pad.
 5. Assembles `AppIcon.iconset` → `AppIcon.icns` via `iconutil` (all standard macOS sizes).
 6. Copies the 512px dock-normalized variant as `AppIconRuntime.png` (used by Activity Monitor / Force Quit).
-7. Writes `Info.plist` with bundle ID `com.veer.FruitClip`, `LSUIElement = true`, version 1.0.
+7. Writes `Info.plist` with bundle ID `com.veer.FruitClip`, `LSUIElement = true`, version derived from the `VERSION` file (falls back to `git describe --tags --exact-match HEAD`, then `1.0`).
 8. Copies SPM resource bundle (`FruitClip_FruitClip.bundle`) into `Contents/Resources/` — required for `Bundle.module` to resolve status bar icon at runtime.
 9. Ad-hoc signs: `codesign --force --sign -`
 10. Validates: `codesign --verify`, `plutil -lint`, binary executable check
@@ -51,6 +51,19 @@ open FruitClip.app
 - Reads `fruit-clip.png` (app icon source) and `fruit-clip Background Removed.png` (menu bar source)
 - Outputs `assets/icons/macos/fruit_clip_icon_{16..1024}.png` and status bar icons (`fruit-clip-status.png` 22×22, `fruit-clip-status@2x.png` 44×44) into `Sources/FruitClip/Resources/`
 - Replaces `Resources/fruit-clip.png` with the 512px variant (avoids committing the 4+ MB original)
+
+### End-user install / uninstall
+
+For distributing the built `FruitClip.app/` to another machine (or a clean install on yours):
+
+```bash
+./build.sh         # produces FruitClip.app/
+./install.sh       # stops running instance, copies to /Applications, clears quarantine, opens app
+./uninstall.sh     # removes /Applications/FruitClip.app (preserves history)
+./uninstall.sh --wipe-data   # also removes ~/Library/Application Support/com.veer.FruitClip and the prefs plist
+```
+
+`install.sh` requires `FruitClip.app` to exist in the current directory and refuses to run if `codesign --verify --deep --strict` fails on it.
 
 ## Permissions required at runtime
 
@@ -87,10 +100,13 @@ log stream --predicate 'subsystem == "com.veer.FruitClip"'
 
 | Suite | File |
 |-------|------|
-| `ClipboardHistoryItemTests` | Codable round-trip, hash determinism |
-| `ClipboardHistoryStoreTests` | Unit tests with temp directory |
-| `ClipboardHistoryStoreIntegrationTests` | Integration tests |
+| `ClipboardHistoryItemTests` | Codable round-trip, hash determinism, `isStarred` backward-compat |
+| `ClipboardHistoryStoreTests` | Unit tests with temp directory (star toggle, retention, prune) |
+| `ClipboardHistoryStoreIntegrationTests` | Integration tests including `StorageEnvelope` legacy migration |
 | `ElapsedStringTests` | `elapsedString()` formatting |
-| `HotkeyFormatterTests` | Key code → string conversion |
-| `SettingsStoreTests` | UserDefaults wrapper |
+| `GlobalHotkeyManagerTests` | Hotkey registration / re-register / configuredHotkeys |
+| `HotkeyFormatterTests` | Key code + modifier → display string conversion |
+| `PopupKeyboardRouterTests` | Pure key-event → command state machine (search↔list, digit select, tab switch) |
+| `PopupScrollPlannerTests` | Scroll anchor selection for keyboard nav |
+| `SettingsStoreTests` | UserDefaults wrapper, shortcut encoding, legacy hotkey migration |
 | `TextPreviewTests` | `makeTextPreview()`, URL detection |

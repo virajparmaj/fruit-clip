@@ -7,22 +7,24 @@ No traditional routing — this is a macOS menu bar app with discrete UI surface
 | Surface | Trigger | Key components | Auth needed | Status |
 |---------|---------|----------------|-------------|--------|
 | Menu bar icon + dropdown | App launch (always visible) | `StatusItemController`, `NSStatusItem`, `NSMenu` | No | Confirmed |
-| Clipboard popup | Hotkey press or "Open Clipboard" menu item | `PopupPanelController`, `FloatingPanel`, `ClipboardPopupView`, `ClipboardItemRow` | No | Confirmed |
-| Preferences window | Menu → Preferences or `⌘,` | `PreferencesWindowController`, `PreferencesView`, `HotkeyRecorderView` | No | Confirmed |
+| Clipboard popup (Board / Star tabs) | Open Board hotkey, optional Open Star hotkey, or "Open Board" menu item | `PopupPanelController`, `FloatingPanel`, `ClipboardPopupView`, `PopupTabPicker`, `ClipboardItemRow` | No | Confirmed |
+| Settings window | Menu → Settings… or `⌘,` | `PreferencesWindowController`, `PreferencesView` (sidebar), `ShortcutRecorderView` | No | Confirmed |
+| Hotkey conflict alert | `RegisterEventHotKey` returns non-`noErr` | `NSAlert` (inline in `AppCoordinator`) | No | Confirmed |
+| Launch at Login error alert | `SMAppService.register/unregister` throws | `NSAlert` (inline in `PreferencesView.updateLaunchAtLogin`) | No | Confirmed |
 | Accessibility alert | Auto-paste attempted without permission | `NSAlert` (inline in `PasteController`) | No | Confirmed |
-| Clear history confirmation | Menu → Clear History or Preferences button | `NSAlert` (inline in `AppCoordinator`) | No | Confirmed |
+| Clear Board confirmation | Menu → Clear Board or Settings → Storage button | `NSAlert` (inline in `AppCoordinator`) | No | Confirmed |
 
 ## Menu bar dropdown items
 
-**Confirmed from code** (`StatusItemController.swift`):
+**Confirmed from code** (`StatusItemController.swift:67-97`):
 
 ```
-Open Clipboard
+Open Board
 ─────────────
-Preferences...  (⌘,)
+Settings...  (⌘,)
 Pause Monitoring / Resume Monitoring
 ─────────────
-Clear History
+Clear Board
 ─────────────
 Quit FruitClip  (⌘Q)
 ```
@@ -31,34 +33,35 @@ Quit FruitClip  (⌘Q)
 
 ```
 ┌──────────────────────────────────────┐
-│  🔍 Search clips...              [×] │  ← search bar (auto-focused)
+│             [ Board | Star ]         │  ← PopupTabPicker (centered)
+│  🔍 Search board items...        [×] │  ← search bar (auto-focused)
 │ ─────────────────────────────────── │
-│  📌 Preview text              <1m    │  ← selected (blue highlight)
-│     Another clip              5m    │
-│     🔗 github.com/...         1h    │
-│     [photo] Image 1920x1080   2d    │
+│  Preview text                  ★ <1m │  ← selected (blue highlight, gold ★ if starred)
+│     Another clip                  5m │
+│     🔗 github.com/...             1h │
+│     [thumb] Image 1920x1080       2d │
 └──────────────────────────────────────┘
 ```
-Size: 340×380pt. Positioned at screen center.
+Size: 400×520pt, `cornerRadius: 18`, dark glass background. Positioned at the active screen's center.
 
-## Preferences window layout
+## Settings window layout
 
 ```
-┌──────────────────────────────────────┐
-│  FruitClip Preferences               │
-│ ─────────────────────────────────── │
-│  Hotkey                              │
-│    Global Shortcut: [⌘⇧V] [Record]  │
-│ ─────────────────────────────────── │
-│  General                             │
-│    ☐ Launch at Login                 │
-│    ☐ Dismiss on mouse move           │
-│ ─────────────────────────────────── │
-│  Accessibility                       │
-│    ✓ Accessibility permission granted│
-│ ─────────────────────────────────── │
-│  Data                                │
-│    [Clear History]                   │
-└──────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  Settings                  │  General                       │
+│  ─────────────             │  ─────────────                 │
+│  ⚙  General        ●       │  Launch at Login         ◯     │
+│  ⌘  Shortcuts              │  Dismiss on mouse move   ◯     │
+│  💾 Storage                 │                                │
+│  ♿ Accessibility           │  Popup font size       12 pt   │
+│                            │  ──○─────────────              │
+│  [Auto-paste ready]        │  [ font preview card ]         │
+└────────────────────────────────────────────────────────────┘
 ```
-Size: 420×480pt. Standard titled closable NSWindow.
+
+Size: **760×560pt**, `[.titled, .closable]` non-modal NSWindow. Sidebar (220pt) lists `General / Shortcuts / Storage / Accessibility`, plus a permanent Accessibility status card at the bottom. Right pane is a scrollable section view.
+
+- **General**: Launch at Login, Dismiss on mouse move, Popup font size slider (11–15pt) with live preview card.
+- **Shortcuts**: Open Board, Open Star (with enable toggle), Star item, Delete item, Switch to Star, Copy selected, Focus search.
+- **Storage**: Board retention picker, Star retention picker, Clear Board button.
+- **Accessibility**: status badge + Grant Access button when missing.

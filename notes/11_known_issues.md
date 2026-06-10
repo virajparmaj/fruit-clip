@@ -4,21 +4,26 @@
 
 | Issue | Detail | Source |
 |-------|--------|--------|
-| `ThumbnailCache` uses deprecated `lockFocus/unlockFocus` | Both sync and async paths draw thumbnails via the deprecated NSImage focus API. Works on macOS 15 but should be migrated to `NSBitmapImageRep`-based drawing. | `ThumbnailCache.swift:37-41`, `66-71` — Confirmed from code |
-| Launch at Login silently fails | `SMAppService.register()` errors are caught and discarded. No user feedback if login item registration fails (e.g., when running outside a proper .app bundle). | `PreferencesWindow.swift:155-163` — Confirmed from code |
-| Hotkey recorder has no conflict detection | If the user records a hotkey already registered by another app or macOS, `RegisterEventHotKey` will silently fail or steal the combo. No warning shown. | `GlobalHotkeyManager.swift` — Confirmed from code |
-| Image items excluded from search with no UX indication | The filter only matches `.text` items. A user searching while an image is selected may be confused why images disappear. | `ClipboardPopupView.swift:21-24` — Confirmed from code |
-| `metadata.json` has no schema version | If `ClipboardHistoryItem` fields change, old JSON files will silently fail to decode (`items = []` fallback). History lost on model changes. | `ClipboardHistoryStore.swift:234-245` — Confirmed from code |
-| Dismiss-on-mouse-move threshold may be hair-trigger | 10px accumulated delta is very low, especially on trackpads with high-resolution scroll events. Real-world usability not validated. | `PopupPanelController.swift:79` — Strongly inferred |
+| Image items excluded from search with no UX indication | The filter only matches `.text` items. A user searching while an image is selected may be confused why images disappear. | `ClipboardPopupView.swift:31-40` — Confirmed from code |
+| Single-key shortcut defaults are global within the popup, not the app | `starItem` (`S`), `deleteItem` (`D`), `switchToStar` (`F`) are bare keys with no modifier — fine inside the popup, but easy to record an unrecoverable combo if a user re-records a global open shortcut to a single key. | `SettingsModels.swift:13-15`, `ShortcutRecorderNSView` modes — Strongly inferred |
 
 ## Low
 
 | Issue | Detail | Source |
 |-------|--------|--------|
-| No notarization | Cannot distribute to other machines without Gatekeeper warnings. | `build.sh` — Confirmed from code |
+| No notarization | Cannot distribute to other machines without Gatekeeper warnings (although `install.sh` clears the quarantine flag for the local-build flow). | `build.sh`, `install.sh:131-134` — Confirmed from code |
 | No CI/CD | Tests only run manually via `swift test`. No automated verification on commit. | Not found in repository |
-| Version hardcoded in build.sh | `VERSION="1.0"` in `build.sh` — no automated bump, no git tag integration. | `build.sh:5` — Confirmed from code |
 | Carbon API deprecated | `RegisterEventHotKey` is deprecated but stable. No timeline for removal from macOS, but worth tracking. | `GlobalHotkeyManager.swift` — Confirmed from code |
-| `ClipboardHistoryStore` hardcodes `storageDir` path | Falls back to `applicationSupportDirectory` — only injectable for tests. If bundle ID changes, existing history is orphaned. | `ClipboardHistoryStore.swift:37-44` — Confirmed from code |
-| `NSApp.activate(ignoringOtherApps: true)` usage | Called in `PreferencesWindowController.showWindow()`. The `ignoringOtherApps` parameter is deprecated in macOS 14+. | `PreferencesWindow.swift:27, 52` — Confirmed from code |
+| `ClipboardHistoryStore` hardcodes `storageDir` path | Falls back to `applicationSupportDirectory` — only injectable for tests. If bundle ID changes, existing history is orphaned. | `ClipboardHistoryStore.swift:36-43` — Confirmed from code |
 | Rich-text / file clipboard types not supported | Only `.string` (plain text) and `.tiff`/`.png` image types captured. RTF, HTML, file URLs silently ignored. | `ClipboardHistoryStore.importFromPasteboard()` — Confirmed from code |
+| `clearAll()` is unreachable from the UI | `ClipboardHistoryStore.clearAll()` exists but only `clearBoard()` is wired to the menu and Settings button — there is currently no in-app way to wipe starred items in bulk. | `AppCoordinator.swift:65,101-113` — Confirmed from code |
+
+## Resolved since v1 (kept here for git context)
+
+- `ThumbnailCache` migrated from deprecated `lockFocus/unlockFocus` to `NSBitmapImageRep` offscreen rendering (`ThumbnailCache.swift:62`).
+- `metadata.json` is now wrapped in `StorageEnvelope` (schema v3) with automatic legacy-array migration (`ClipboardHistoryStore.swift:283-306`).
+- Launch at Login surfaces failures in a user-visible alert and reverts the toggle (`PreferencesWindow.swift:521-542`).
+- Hotkey conflict detection ships: `GlobalHotkeyManager.onRegistrationFailed` triggers a "Shortcut Conflict" alert and opens Settings (`GlobalHotkeyManager.swift:75-82`, `AppCoordinator.swift:51-58`).
+- Build version is no longer hardcoded — `build.sh` reads the `VERSION` file (with `git describe` fallback, then literal `1.0`) (`build.sh:7-13`).
+- Deprecated `NSApp.activate(ignoringOtherApps:)` is gone; the codebase now uses the no-arg `NSApp.activate()` (`PreferencesWindow.swift:83,111`).
+- Dismiss-on-mouse-move threshold raised from 10pt to 50pt to stop hair-triggering on high-resolution trackpads (`PopupPanelController.swift:46-47`).

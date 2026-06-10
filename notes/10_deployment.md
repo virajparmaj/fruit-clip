@@ -9,7 +9,10 @@ Manual, local only. No CI/CD, no remote hosting, no distribution pipeline.
 | Step | Command | Output |
 |------|---------|--------|
 | Build release app bundle | `./build.sh` | `FruitClip.app/` in project root |
-| Launch | `open FruitClip.app` | App running in menu bar |
+| Install to `/Applications` | `./install.sh` | App copied, quarantine cleared, launched (6-step script) |
+| Launch (without install) | `open FruitClip.app` | App running in menu bar |
+| Uninstall app only | `./uninstall.sh` | Removes `/Applications/FruitClip.app`, preserves history |
+| Uninstall + wipe data | `./uninstall.sh --wipe-data` | Also removes `~/Library/Application Support/com.veer.FruitClip/` and the prefs plist, flushes `cfprefsd` |
 
 ## Code signing
 
@@ -25,8 +28,8 @@ Ad-hoc only (`codesign --sign -`). This means:
 | Key | Value |
 |-----|-------|
 | `CFBundleIdentifier` | `com.veer.FruitClip` |
-| `CFBundleVersion` | `1.0` |
-| `CFBundleShortVersionString` | `1.0` |
+| `CFBundleVersion` | from `VERSION` file (currently `1.0`) |
+| `CFBundleShortVersionString` | from `VERSION` file (currently `1.0`) |
 | `LSMinimumSystemVersion` | `15.0` |
 | `LSUIElement` | `true` (menu bar agent, no Dock) |
 | `NSHighResolutionCapable` | `true` |
@@ -47,6 +50,7 @@ Ad-hoc only (`codesign --sign -`). This means:
 
 ## Deployment risks
 
-- `SMAppService.mainApp` launch-at-login silently swallows errors — if it breaks, no user-facing indication (`Strongly inferred` from code comment in `PreferencesWindow.swift:162`)
-- Ad-hoc signing will be revoked if the binary is modified post-sign
-- No version bump automation — `VERSION="1.0"` hardcoded in `build.sh`
+- Ad-hoc signing will be revoked if the binary is modified post-sign — re-run `build.sh` then `install.sh`
+- `VERSION` file is the single source of truth; bumping a release means editing `VERSION` (or pushing an annotated git tag) before `./build.sh`
+- `install.sh` overwrites `/Applications/FruitClip.app` without further confirmation once prerequisites pass
+- `uninstall.sh --wipe-data` is irreversible (clipboard history is local-only, not synced)
