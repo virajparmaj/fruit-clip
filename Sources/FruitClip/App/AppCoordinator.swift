@@ -114,7 +114,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
 
     private func applyDockIcon() {
         guard
-            let url = Bundle.module.url(forResource: "fruit-clip", withExtension: "png"),
+            let url = ResourceLoader.url(forResource: "fruit-clip", withExtension: "png"),
             let image = NSImage(contentsOf: url)
         else { return }
 
